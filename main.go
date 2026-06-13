@@ -1,0 +1,183 @@
+// claude-docker 環境を「案件の隣」に生成する CLI。
+//
+// 使い方:
+//
+//	new-claude-env -a ACCOUNT [-n ENVNAME] <project-path>...
+//
+//	-a ACCOUNT  アカウント prefix(必須)。共有 volume とプロジェクト名に使う。
+//	            prefix を変える = 別の Claude Code / gh アカウントで使う、という意味。
+//	            環境変数 ACCT でも指定可(優先順位: -a > ACCT)。既定値なし。
+//	-n ENVNAME  プロジェクト名を明示(単一ディレクトリ指定時のみ)。非ASCII名の案件用。
+//
+// 例:
+//
+//	new-claude-env -a gg ~/work/riku_dx_web_0
+//	new-claude-env -a gg ~/work/riku_dx_web_*/        # サフィックス違いをまとめて
+//	new-claude-env -a acme -n acme-a ~/work/案件A     # 非ASCIIは -n で明示
+package main
+
+import (
+	"embed"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+//go:embed all:templates
+var templatesFS embed.FS
+
+var sanitizeRe = regexp.MustCompile(`[^a-z0-9_-]`)
+
+// sanitize は compose のプロジェクト名 / volume 名で使える形(英小文字・数字・-・_)に整える。
+func sanitize(s string) string {
+	return sanitizeRe.ReplaceAllString(strings.ToLower(s), "-")
+}
+
+func mustReadTemplate(name string) string {
+	b, err := templatesFS.ReadFile("templates/" + name)
+	if err != nil {
+		fatalf("read embedded template %s: %v", name, err)
+	}
+	return string(b)
+}
+
+func fatalf(format string, a ...any) {
+	fmt.Fprintf(os.Stderr, "error: "+format+"\n", a...)
+	os.Exit(1)
+}
+
+func main() {
+	var acct, envName string
+	flag.StringVar(&acct, "a", "", "account prefix (required; or env ACCT)")
+	flag.StringVar(&envName, "n", "", "project name override (single dir only)")
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: new-claude-env -a ACCOUNT [-n ENVNAME] <project-path>...")
+		fmt.Fprintln(os.Stderr, "       (ACCOUNT は -a フラグまたは環境変数 ACCT で必須指定。フラグは引数より前)")
+	}
+	flag.Parse()
+
+	// --- account prefix(必須): -a > 環境変数 ACCT ---
+	if acct == "" {
+		acct = os.Getenv("ACCT")
+	}
+	if acct == "" {
+		fmt.Fprintln(os.Stderr, "error: account prefix is required (-a ACCOUNT or env ACCT)")
+		flag.Usage()
+		os.Exit(1)
+	}
+	acct = sanitize(acct)
+	if acct == "" {
+		fatalf("account prefix is empty after sanitizing")
+	}
+
+	args := flag.Args()
+	if len(args) < 1 {
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	// --- glob を自前展開(シェルが展開しなかった場合の保険)+ 重複排除 ---
+	var paths []string
+	seen := map[string]bool{}
+	for _, a := range args {
+		matches := []string{a}
+		if strings.ContainsAny(a, "*?[") {
+			if m, err := filepath.Glob(a); err == nil {
+				matches = m // マッチ0件なら空になり、その引数はスキップされる
+			}
+		}
+		for _, m := range matches {
+			if !seen[m] {
+				seen[m] = true
+				paths = append(paths, m)
+			}
+		}
+	}
+
+	multi := len(paths) > 1
+	if envName != "" && multi {
+		fatalf("-n ENVNAME は単一ディレクトリ指定時のみ使えます(複数指定時は basename を使用)")
+	}
+
+	dockerfile := mustReadTemplate("Dockerfile")
+	composeTmpl := mustReadTemplate("docker-compose.yml.tmpl")
+	envExample := mustReadTemplate(".env.example")
+
+	created, skipped := 0, 0
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil || !info.IsDir() {
+			fmt.Fprintf(os.Stderr, "skip (not a directory): %s\n", p)
+			skipped++
+			continue
+		}
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "skip (abs failed): %s\n", p)
+			skipped++
+			continue
+		}
+		name := filepath.Base(abs)
+		parent := filepath.Dir(abs)
+		envDir := filepath.Join(parent, name+"-claude")
+
+		// 複数指定(glob)時は、生成済みの *-claude を拾わないようガード
+		if multi && strings.HasSuffix(name, "-claude") {
+			fmt.Fprintf(os.Stderr, "skip (looks like a generated env): %s\n", name)
+			skipped++
+			continue
+		}
+		if _, err := os.Stat(envDir); err == nil {
+			fmt.Fprintf(os.Stderr, "skip (already exists): %s-claude\n", name)
+			skipped++
+			continue
+		}
+
+		base := name
+		if envName != "" {
+			base = envName
+		}
+		fullName := acct + "-" + sanitize(base) + "-claude"
+
+		if err := os.MkdirAll(envDir, 0o755); err != nil {
+			fatalf("mkdir %s: %v", envDir, err)
+		}
+		compose := strings.NewReplacer(
+			"__PROJECT__", "../"+name,
+			"__ENVNAME__", fullName,
+			"__ACCT__", acct,
+		).Replace(composeTmpl)
+
+		writeFile(filepath.Join(envDir, "Dockerfile"), dockerfile)
+		writeFile(filepath.Join(envDir, "docker-compose.yml"), compose)
+		writeFile(filepath.Join(envDir, ".env.example"), envExample)
+
+		fmt.Printf("created: %s  (name: %s)\n", envDir, fullName)
+		created++
+	}
+
+	fmt.Printf("\ndone. created=%d skipped=%d  account=%s\n", created, skipped, acct)
+	if created > 0 {
+		fmt.Printf(`
+next (この account で初回だけ):
+  docker volume create %[1]s-claude-enterprise
+  docker volume create %[1]s-gh-config
+  ssh-add <この account の git 秘密鍵>           # Linux はさらに HOST_SSH_AUTH_SOCK を export
+
+起動(生成した各環境で):
+  for d in <親ディレクトリ>/*-claude/; do (cd "$d" && docker compose up -d); done
+  # ログインは1回でOK(同じ account の volume を共有):
+  #   docker compose exec claude claude        # /login
+  #   docker compose exec claude gh auth login
+`, acct)
+	}
+}
+
+func writeFile(path, content string) {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		fatalf("write %s: %v", path, err)
+	}
+}

@@ -1,0 +1,46 @@
+name: __ENVNAME__
+
+services:
+  # ---- Claude Code が動く本体 ----
+  claude:
+    build: .
+    command: sleep infinity              # tmux を生かし続ける(exec で入る)
+    environment:
+      - DOCKER_HOST=tcp://dind:2375      # 案件の docker compose は dind 側で動かす
+      - SSH_AUTH_SOCK=/ssh-agent         # git の ssh はホストの agent に委譲
+      - GH_TOKEN=${GH_TOKEN:-}           # 任意: PATが取れる場合のみ(空ならgh auth loginを使う)
+    volumes:
+      - __PROJECT__:/workspace                     # 隣の案件リポジトリ(ソース共有)
+      - __ACCT__-claude-enterprise:/home/node/.claude    # エンタープライズ認証(account内で共有)
+      - __ACCT__-gh-config:/home/node/.config/gh         # gh auth login の保存先(account内で共有)
+      - ${HOST_SSH_AUTH_SOCK:-/run/host-services/ssh-auth.sock}:/ssh-agent
+      # github-gg エイリアスをコンテナ内でも使う場合のみ(パスは環境に合わせる):
+      # - ~/.ssh/config:/home/node/.ssh/config:ro
+      # - ~/ssh_keys/gg/gg-github/gg-git_id_ed25519.pub:/home/node/ssh_keys/gg/gg-github/gg-git_id_ed25519.pub:ro
+    working_dir: /workspace
+    depends_on: [dind]
+
+  # ---- 案件を隔離して動かす Docker-in-Docker ----
+  dind:
+    image: docker:27-dind
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=              # 内部ネットワーク限定の簡易構成(TLSなし)
+    volumes:
+      - __PROJECT__:/workspace           # claude と同じパス(bind mount 整合のため)
+      - dind-storage:/var/lib/docker     # イメージキャッシュ(この案件専用)
+
+volumes:
+  # この案件専用(name で namespace 化されるので他案件と衝突しない)。
+  # ※ 2つのデーモンで /var/lib/docker を共有すると破損するため絶対に external 共有しない。
+  dind-storage:
+
+  # 認証は同じ account のプロジェクトで共有 + 誤削除防止のため external。
+  # 初回に手動作成:  docker volume create __ACCT__-claude-enterprise
+  __ACCT__-claude-enterprise:
+    external: true
+
+  # gh auth login の保存先。同じ account のプロジェクトで共有(会社アカウント1つ)。
+  # 初回に手動作成:  docker volume create __ACCT__-gh-config
+  __ACCT__-gh-config:
+    external: true
