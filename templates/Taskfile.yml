@@ -1,0 +1,57 @@
+version: "3"
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  up:
+    desc: Start the Claude and DinD containers
+    cmds:
+      - docker compose up -d
+
+  rebuild:
+    desc: Rebuild Claude Code with the latest native installer
+    cmds:
+      - docker compose build --pull --no-cache claude
+      - docker compose up -d --force-recreate claude
+
+  down:
+    desc: Stop and remove the containers
+    cmds:
+      - docker compose down
+
+  ps:
+    desc: Show container status
+    cmds:
+      - docker compose ps
+
+  logs:
+    desc: Follow container logs
+    cmds:
+      - docker compose logs -f
+
+  shell:
+    desc: Open a shell in the Claude container
+    interactive: true
+    cmds:
+      - docker compose exec claude bash
+
+  claude:
+    desc: Start Claude Code in the project workspace
+    interactive: true
+    cmds:
+      - docker compose exec claude claude
+
+  tmux:
+    desc: Attach to the persistent Claude tmux session
+    interactive: true
+    cmds:
+      - docker compose exec claude tmux new -A -s claude
+
+  gh-login:
+    desc: Log in to GitHub CLI
+    interactive: true
+    cmds:
+      - docker compose exec claude gh auth login

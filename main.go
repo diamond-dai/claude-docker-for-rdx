@@ -17,7 +17,10 @@
 package main
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -30,6 +33,21 @@ import (
 var templatesFS embed.FS
 
 var sanitizeRe = regexp.MustCompile(`[^a-z0-9_-]`)
+
+const manifestVersion = 1
+
+type managedFile struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+}
+
+type manifest struct {
+	Version     int           `json:"version"`
+	Account     string        `json:"account"`
+	Project     string        `json:"project"`
+	ComposeName string        `json:"compose_name"`
+	Files       []managedFile `json:"files"`
+}
 
 // sanitize は compose のプロジェクト名 / volume 名で使える形(英小文字・数字・-・_)に整える。
 func sanitize(s string) string {
@@ -51,10 +69,12 @@ func fatalf(format string, a ...any) {
 
 func main() {
 	var acct, envName string
+	var update bool
 	flag.StringVar(&acct, "a", "", "account prefix (required; or env ACCT)")
 	flag.StringVar(&envName, "n", "", "project name override (single dir only)")
+	flag.BoolVar(&update, "u", false, "update an existing generated environment")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: new-claude-env -a ACCOUNT [-n ENVNAME] <project-path>...")
+		fmt.Fprintln(os.Stderr, "usage: new-claude-env -a ACCOUNT [-n ENVNAME] [-u] <project-path>...")
 		fmt.Fprintln(os.Stderr, "       (ACCOUNT は -a フラグまたは環境変数 ACCT で必須指定。フラグは引数より前)")
 	}
 	flag.Parse()
@@ -105,8 +125,9 @@ func main() {
 	dockerfile := mustReadTemplate("Dockerfile")
 	composeTmpl := mustReadTemplate("docker-compose.yml.tmpl")
 	envExample := mustReadTemplate(".env.example")
+	taskfile := mustReadTemplate("Taskfile.yml")
 
-	created, skipped := 0, 0
+	created, updated, unchanged, skipped := 0, 0, 0, 0
 	for _, p := range paths {
 		info, err := os.Stat(p)
 		if err != nil || !info.IsDir() {
@@ -130,10 +151,19 @@ func main() {
 			skipped++
 			continue
 		}
-		if _, err := os.Stat(envDir); err == nil {
-			fmt.Fprintf(os.Stderr, "skip (already exists): %s-claude\n", name)
-			skipped++
-			continue
+		envExists := false
+		if info, err := os.Stat(envDir); err == nil {
+			if !info.IsDir() {
+				fmt.Fprintf(os.Stderr, "skip (generated path is not a directory): %s\n", envDir)
+				skipped++
+				continue
+			}
+			envExists = true
+			if !update {
+				fmt.Fprintf(os.Stderr, "skip (already exists; use -u to update): %s-claude\n", name)
+				skipped++
+				continue
+			}
 		}
 
 		base := name
@@ -151,15 +181,58 @@ func main() {
 			"__ACCT__", acct,
 		).Replace(composeTmpl)
 
-		writeFile(filepath.Join(envDir, "Dockerfile"), dockerfile)
-		writeFile(filepath.Join(envDir, "docker-compose.yml"), compose)
-		writeFile(filepath.Join(envDir, ".env.example"), envExample)
+		files := []struct {
+			name    string
+			content string
+		}{
+			{name: "Dockerfile", content: dockerfile},
+			{name: "docker-compose.yml", content: compose},
+			{name: ".env.example", content: envExample},
+			{name: "Taskfile.yml", content: taskfile},
+		}
 
-		fmt.Printf("created: %s  (name: %s)\n", envDir, fullName)
-		created++
+		changedFiles := make([]string, 0, len(files)+1)
+		manifestFiles := make([]managedFile, 0, len(files))
+		for _, file := range files {
+			status := writeFileIfChanged(filepath.Join(envDir, file.name), file.content)
+			if status != "unchanged" {
+				changedFiles = append(changedFiles, file.name)
+			}
+			manifestFiles = append(manifestFiles, managedFile{
+				Path:   file.name,
+				SHA256: contentSHA256(file.content),
+			})
+		}
+
+		manifestContent, err := json.MarshalIndent(manifest{
+			Version:     manifestVersion,
+			Account:     acct,
+			Project:     name,
+			ComposeName: fullName,
+			Files:       manifestFiles,
+		}, "", "  ")
+		if err != nil {
+			fatalf("marshal manifest: %v", err)
+		}
+		if writeFileIfChanged(filepath.Join(envDir, ".claude-docker.json"), string(manifestContent)+"\n") != "unchanged" {
+			changedFiles = append(changedFiles, ".claude-docker.json")
+		}
+
+		switch {
+		case !envExists:
+			fmt.Printf("created: %s  (name: %s)\n", envDir, fullName)
+			created++
+		case len(changedFiles) > 0:
+			fmt.Printf("updated: %s  (files: %s)\n", envDir, strings.Join(changedFiles, ", "))
+			updated++
+		default:
+			fmt.Printf("unchanged: %s\n", envDir)
+			unchanged++
+		}
 	}
 
-	fmt.Printf("\ndone. created=%d skipped=%d  account=%s\n", created, skipped, acct)
+	fmt.Printf("\ndone. created=%d updated=%d unchanged=%d skipped=%d  account=%s\n",
+		created, updated, unchanged, skipped, acct)
 	if created > 0 {
 		fmt.Printf(`
 next (この account で初回だけ):
@@ -168,16 +241,34 @@ next (この account で初回だけ):
   ssh-add <この account の git 秘密鍵>           # Linux はさらに HOST_SSH_AUTH_SOCK を export
 
 起動(生成した各環境で):
-  for d in <親ディレクトリ>/*-claude/; do (cd "$d" && docker compose up -d); done
+  cd <生成した環境>
+  task up
+  task claude
   # ログインは1回でOK(同じ account の volume を共有):
-  #   docker compose exec claude claude        # /login
-  #   docker compose exec claude gh auth login
+  #   task claude
+  #   task gh-login
 `, acct)
 	}
 }
 
-func writeFile(path, content string) {
+func contentSHA256(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])
+}
+
+func writeFileIfChanged(path, content string) string {
+	current, err := os.ReadFile(path)
+	if err == nil && string(current) == content {
+		return "unchanged"
+	}
+	status := "updated"
+	if os.IsNotExist(err) {
+		status = "created"
+	} else if err != nil {
+		fatalf("read %s: %v", path, err)
+	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		fatalf("write %s: %v", path, err)
 	}
+	return status
 }

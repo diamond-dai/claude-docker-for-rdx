@@ -14,7 +14,9 @@
 └── myproject-claude/       ← ← scaffold が生成(claude-docker・git管理外)
     ├── docker-compose.yml  ← ../myproject を /workspace に指す
     ├── Dockerfile
-    └── .env.example
+    ├── .env.example
+    ├── Taskfile.yml
+    └── .claude-docker.json
 ```
 
 - claude コンテナ … Claude Code 本体 / tmux / git(SSH agent 転送)
@@ -24,7 +26,7 @@
 ## 同梱物
 
 - `main.go` / `go.mod` … 生成ツール。テンプレを埋め込む単一バイナリにできる
-- `templates/` … 生成元(Dockerfile / docker-compose.yml.tmpl / .env.example)
+- `templates/` … 生成元(Dockerfile / docker-compose.yml.tmpl / .env.example / Taskfile.yml)
 - `README.md`
 
 ### ツールの用意
@@ -134,19 +136,42 @@ docker compose exec claude gh auth login
 #   → riku_dx_web_0-claude 〜 _3-claude をまとめて作成
 #   再実行は冪等(既存 / 生成済み *-claude は自動スキップ)
 
-# 起動 → ログイン → tmux
+# 起動 → Claude Code
 cd ~/work/myproject-claude
-docker compose up -d
-docker compose exec claude claude               # /login(初回のみ)
-docker compose exec claude tmux new -A -s myproject
+task up
+task claude               # /login(初回のみ)
 ```
 
-複数まとめて起動する場合:
+生成される `Taskfile.yml` では以下の操作ができる。
+
+| コマンド | 処理 |
+|---|---|
+| `task up` | Claude / DinD コンテナを起動 |
+| `task rebuild` | ベースイメージとClaude Codeを最新版で再ビルド |
+| `task claude` | Claude Code を起動 |
+| `task shell` | Claude コンテナの bash を開く |
+| `task tmux` | 永続 tmux セッションへ接続 |
+| `task gh-login` | GitHub CLI にログイン |
+| `task logs` | Compose ログを追跡 |
+| `task ps` | コンテナ状態を表示 |
+| `task down` | コンテナを停止・削除 |
+
+Claude Code は推奨のネイティブインストーラーで導入する。起動時および実行中に更新を確認し、
+バックグラウンドで取得した更新は次回起動時に反映される。コンテナイメージ自体も更新する場合は
+`task rebuild` を実行する。
+
+既存の生成先をテンプレートとの差分だけ更新する場合:
 
 ```bash
-for d in ~/work/riku_dx_web_*-claude/; do (cd "$d" && docker compose up -d); done
-# 認証は同じ account の volume を共有するので、ログインはどれか1つで1回でよい
+./new-claude-env -a gg -u ~/work/myproject
+
+# go run で複数環境をまとめて更新
+go run . -a gg -u ../riku_dx_web*/
 ```
+
+管理対象と内容のハッシュは `.claude-docker.json` に記録される。`-u` を付けない場合、
+既存の生成先は従来どおりスキップされる。生成先を Git 管理する場合も、実際に内容が
+変わったファイルだけが書き換わるため、そのまま `git diff` で確認できる。
 
 非 ASCII 名の案件は、`-n` でプロジェクト名を明示(単一ディレクトリ時のみ):
 

@@ -21,9 +21,6 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
  && apt-get update && apt-get install -y --no-install-recommends gh \
  && rm -rf /var/lib/apt/lists/*
 
-# ---- Claude Code ----
-RUN npm install -g @anthropic-ai/claude-code
-
 # ---- 認証情報ディレクトリ + known_hosts ----
 # ※ private な git サーバを使う場合は github.com を案件のホストに差し替える。
 RUN mkdir -p /home/node/.claude /home/node/.config/gh /home/node/.ssh \
@@ -32,4 +29,9 @@ RUN mkdir -p /home/node/.claude /home/node/.config/gh /home/node/.ssh \
  && chmod 700 /home/node/.ssh
 
 USER node
+ENV PATH="/home/node/.local/bin:${PATH}"
+
+# ---- Claude Code (native installer; background auto-update対応) ----
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
 WORKDIR /workspace
