@@ -18,8 +18,15 @@ services:
       - POSTGRES_DB=rikudxdb
       - DATABASE_URL=postgresql://postgres:postgres@dind:5432/rikudxdb
       - BACKEND_URL=http://localhost:8000
+      - UV_LINK_MODE=copy
     volumes:
       - __PROJECT__:/workspace                     # 隣の案件リポジトリ(ソース共有)
+      # macOS ホストと Linux コンテナで依存ディレクトリを共有しない。
+      # 共有すると .venv や native package が片方の環境向けに壊れる。
+      - root-node-modules:/workspace/node_modules
+      - frontend-node-modules:/workspace/apps/frontend/node_modules
+      - backend-venv:/workspace/apps/backend/.venv
+      - pnpm-store:/workspace/.pnpm-store
       - __ACCT__-claude-enterprise:/home/node/.claude    # エンタープライズ認証(account内で共有)
       - __ACCT__-gh-config:/home/node/.config/gh         # gh auth login の保存先(account内で共有)
       - __CLAUDE_DOTFILES__:/dotfiles/claude:ro           # dotfiles の Claude Code 設定
@@ -44,6 +51,13 @@ volumes:
   # この案件専用(name で namespace 化されるので他案件と衝突しない)。
   # ※ 2つのデーモンで /var/lib/docker を共有すると破損するため絶対に external 共有しない。
   dind-storage:
+
+  # claude コンテナ専用の依存キャッシュ。プロジェクト bind mount より優先して
+  # ホスト側 node_modules / .venv を隠す。
+  root-node-modules:
+  frontend-node-modules:
+  backend-venv:
+  pnpm-store:
 
   # 認証は同じ account のプロジェクトで共有 + 誤削除防止のため external。
   # 初回に手動作成:  docker volume create __ACCT__-claude-enterprise
