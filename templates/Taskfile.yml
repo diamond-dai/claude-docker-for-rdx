@@ -16,11 +16,14 @@ tasks:
     cmds:
       - |
         docker compose up -d
-        if ! docker compose exec claude bash -lc 'command -v setup-claude-dotfiles' >/dev/null 2>&1; then
+        host_manifest_sha="$(sha256sum .claude-docker.json | awk '{print $1}')"
+        image_manifest_sha="$(docker compose exec -T claude bash -lc "sha256sum /usr/local/share/claude-docker/manifest.json 2>/dev/null | awk '{print \$1}'" 2>/dev/null || true)"
+        if ! docker compose exec -T claude bash -lc 'command -v setup-claude-dotfiles' >/dev/null 2>&1 || [ "$host_manifest_sha" != "$image_manifest_sha" ]; then
           echo "claude image is stale; rebuilding..."
           docker compose up -d --build --force-recreate claude
         fi
-      - docker compose exec -u root claude chown -R user:user /workspace/node_modules /workspace/.venv /workspace/.pnpm-store /workspace/.turbo /workspace/.ruff_cache /home/user/go /home/user/.cache/go-build /workspace/apps/frontend/node_modules /workspace/apps/frontend/.next /workspace/apps/backend/.venv /workspace/apps/backend/.turbo /workspace/apps/backend/.pytest_cache /workspace/apps/backend/.ruff_cache /workspace/apps/frontend/.ruff_cache
+      - docker compose exec -u root claude chown -R user:user /home/user/.claude /home/user/.claude-state /home/user/.config/gh /workspace/node_modules /workspace/.venv /workspace/.pnpm-store /workspace/.turbo /workspace/.ruff_cache /home/user/go /home/user/.cache/go-build /workspace/apps/frontend/node_modules /workspace/apps/frontend/.next /workspace/apps/backend/.venv /workspace/apps/backend/.turbo /workspace/apps/backend/.pytest_cache /workspace/apps/backend/.ruff_cache /workspace/apps/frontend/.ruff_cache
+      - docker compose exec -T claude setup-claude-dotfiles
 
   prepull:
     desc: Pre-pull common project images into this environment's DinD cache

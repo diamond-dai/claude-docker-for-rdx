@@ -25,6 +25,7 @@ echo
 echo "claude:"
 if [ -e "${HOME}/.claude.json" ]; then
   echo "  global_config: ${HOME}/.claude.json -> $(readlink "${HOME}/.claude.json" 2>/dev/null || printf 'regular-file')"
+  echo "  state_dir: ${CLAUDE_STATE_DIR:-${HOME}/.claude-state}"
   jq -r '
     "  machineID: \(.machineID // "")",
     "  userID: \(.userID // "")",

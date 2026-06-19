@@ -3,6 +3,7 @@ set -euo pipefail
 
 src_root="${CLAUDE_DOTFILES_DIR:-/dotfiles/claude}"
 dst_root="${HOME}/.claude"
+state_root="${CLAUDE_STATE_DIR:-${HOME}/.claude-state}"
 
 if [ ! -d "$src_root" ]; then
   echo "claude dotfiles not found: $src_root" >&2
@@ -10,16 +11,29 @@ if [ ! -d "$src_root" ]; then
 fi
 
 mkdir -p "$dst_root"
+mkdir -p "$state_root"
 
 backup_root="${dst_root}/.claude-docker-backup/$(date +%Y%m%d%H%M%S)"
 
 persist_global_config() {
   local src="${HOME}/.claude.json"
-  local dst="${dst_root}/.claude.json"
+  local dst="${state_root}/.claude.json"
+  local old_dst="${dst_root}/.claude.json"
   local tmp
 
   if [ -L "$src" ]; then
     rm -f "$src"
+  fi
+
+  if [ -e "$old_dst" ] && [ "$old_dst" != "$dst" ]; then
+    if [ -e "$dst" ]; then
+      tmp="$(mktemp)"
+      jq -s '.[0] * .[1] | del(.remoteControlAtStartup, .agentPushNotifEnabled)' "$dst" "$old_dst" > "$tmp"
+      mv "$tmp" "$dst"
+      rm -f "$old_dst"
+    else
+      mv "$old_dst" "$dst"
+    fi
   fi
 
   if [ -e "$src" ] && [ -e "$dst" ]; then

@@ -276,6 +276,7 @@ func main() {
 		fmt.Printf(`
 next (この account で初回だけ):
   docker volume create %[1]s-claude-enterprise
+  docker volume create %[1]s-claude-state
   docker volume create %[1]s-gh-config
   ssh-add <この account の git 秘密鍵>           # Linux はさらに HOST_SSH_AUTH_SOCK を export
 

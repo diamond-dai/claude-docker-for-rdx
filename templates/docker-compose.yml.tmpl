@@ -4,7 +4,7 @@ services:
   # ---- Claude Code が動く本体 ----
   claude:
     build: .
-    command: bash -lc "setup-claude-dotfiles && sleep infinity"  # tmux を生かし続ける(exec で入る)
+    command: sleep infinity  # tmux を生かし続ける(exec で入る)。dotfiles setup は task up で実行する。
     environment:
       - SSH_AUTH_SOCK=/ssh-agent         # git の ssh はホストの agent に委譲
       - GH_TOKEN=${GH_TOKEN:-}           # 任意: PATが取れる場合のみ(空ならgh auth loginを使う)
@@ -42,7 +42,9 @@ services:
       - backend-pytest-cache:/workspace/apps/backend/.pytest_cache
       - backend-ruff-cache:/workspace/apps/backend/.ruff_cache
       - frontend-ruff-cache:/workspace/apps/frontend/.ruff_cache
-      - __ACCT__-claude-enterprise:/home/user/.claude    # エンタープライズ認証(account内で共有)
+      # ---- protected external: 認証・初回状態。docker compose down -v でも削除されない ----
+      - __ACCT__-claude-enterprise:/home/user/.claude    # Claude OAuth / credentials(account内で共有)
+      - __ACCT__-claude-state:/home/user/.claude-state   # ~/.claude.json(machineID / firstStartTime 等)
       - __ACCT__-gh-config:/home/user/.config/gh         # gh auth login の保存先(account内で共有)
       - __CLAUDE_DOTFILES__:/dotfiles/claude:ro           # dotfiles の Claude Code 設定
       - ${HOST_SSH_AUTH_SOCK:-/run/host-services/ssh-auth.sock}:/ssh-agent
@@ -86,9 +88,15 @@ volumes:
   backend-ruff-cache:
   frontend-ruff-cache:
 
-  # 認証は同じ account のプロジェクトで共有 + 誤削除防止のため external。
+  # ---- protected external: 認証・初回状態 ----
+  # Compose 管理外なので docker compose down -v でも削除されない。
   # 初回に手動作成:  docker volume create __ACCT__-claude-enterprise
   __ACCT__-claude-enterprise:
+    external: true
+
+  # Claude Code の ~/.claude.json(machineID / firstStartTime 等)。
+  # 初回に手動作成:  docker volume create __ACCT__-claude-state
+  __ACCT__-claude-state:
     external: true
 
   # gh auth login の保存先。同じ account のプロジェクトで共有(会社アカウント1つ)。
