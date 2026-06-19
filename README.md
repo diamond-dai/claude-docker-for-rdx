@@ -69,8 +69,9 @@ docker volume create gg-gh-config
 # macOS(Docker Desktop):
 #   コンテナへ転送されるのは「既定の agent(launchd/keychain)」だけ。
 #   `eval "$(ssh-agent -s)"` で別 agent を立てると Docker Desktop は転送しないので使わない。
-ssh-add ~/ssh_keys/gg/gg-github/gg-git_id_ed25519   # --apple-use-keychain も可
-ssh-add -l                                          # 0 件だと転送されない(必ず確認)
+ssh-add ~/ssh_keys/gg/gg-github/gg-git_id_ed25519                      # 都度登録
+ssh-add --apple-use-keychain ~/ssh_keys/gg/gg-github/gg-git_id_ed25519 # キーチェーン保存(再起動後も自動)
+ssh-add -l                                                            # 0 件だと転送されない(必ず確認)
 ```
 
 > 確認: `task up` 後に `task doctor` の `ssh-agent:` 行を見る。
