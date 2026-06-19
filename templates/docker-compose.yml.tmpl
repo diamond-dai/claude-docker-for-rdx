@@ -4,15 +4,16 @@ services:
   # ---- Claude Code が動く本体 ----
   claude:
     build: .
-    command: sleep infinity              # tmux を生かし続ける(exec で入る)
+    command: bash -lc "setup-claude-dotfiles && sleep infinity"  # tmux を生かし続ける(exec で入る)
     environment:
-      - DOCKER_HOST=tcp://dind:2375      # 案件の docker compose は dind 側で動かす
       - SSH_AUTH_SOCK=/ssh-agent         # git の ssh はホストの agent に委譲
       - GH_TOKEN=${GH_TOKEN:-}           # 任意: PATが取れる場合のみ(空ならgh auth loginを使う)
+      - CLAUDE_DOTFILES_DIR=/dotfiles/claude
     volumes:
       - __PROJECT__:/workspace                     # 隣の案件リポジトリ(ソース共有)
       - __ACCT__-claude-enterprise:/home/node/.claude    # エンタープライズ認証(account内で共有)
       - __ACCT__-gh-config:/home/node/.config/gh         # gh auth login の保存先(account内で共有)
+      - __CLAUDE_DOTFILES__:/dotfiles/claude:ro           # dotfiles の Claude Code 設定
       - ${HOST_SSH_AUTH_SOCK:-/run/host-services/ssh-auth.sock}:/ssh-agent
       # github-gg エイリアスをコンテナ内でも使う場合のみ(パスは環境に合わせる):
       # - ~/.ssh/config:/home/node/.ssh/config:ro

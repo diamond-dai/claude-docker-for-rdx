@@ -62,6 +62,35 @@ func mustReadTemplate(name string) string {
 	return string(b)
 }
 
+func defaultClaudeDotfilesDir() string {
+	if dir := os.Getenv("CLAUDE_DOTFILES_CLAUDE_DIR"); dir != "" {
+		return expandHome(dir)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fatalf("resolve home directory: %v", err)
+	}
+	return filepath.Join(home, "dotfiles", "config", "claude")
+}
+
+func expandHome(path string) string {
+	if path == "~" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fatalf("resolve home directory: %v", err)
+		}
+		return home
+	}
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fatalf("resolve home directory: %v", err)
+		}
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
+
 func fatalf(format string, a ...any) {
 	fmt.Fprintf(os.Stderr, "error: "+format+"\n", a...)
 	os.Exit(1)
@@ -126,6 +155,11 @@ func main() {
 	composeTmpl := mustReadTemplate("docker-compose.yml.tmpl")
 	envExample := mustReadTemplate(".env.example")
 	taskfile := mustReadTemplate("Taskfile.yml")
+	setupClaudeDotfiles := mustReadTemplate("setup-claude-dotfiles.sh")
+	claudeDockerInfo := mustReadTemplate("claude-docker-info.sh")
+	scutil := mustReadTemplate("scutil")
+	dockerWrapper := mustReadTemplate("docker")
+	claudeDotfilesDir := defaultClaudeDotfilesDir()
 
 	created, updated, unchanged, skipped := 0, 0, 0, 0
 	for _, p := range paths {
@@ -179,6 +213,7 @@ func main() {
 			"__PROJECT__", "../"+name,
 			"__ENVNAME__", fullName,
 			"__ACCT__", acct,
+			"__CLAUDE_DOTFILES__", claudeDotfilesDir,
 		).Replace(composeTmpl)
 
 		files := []struct {
@@ -189,6 +224,10 @@ func main() {
 			{name: "docker-compose.yml", content: compose},
 			{name: ".env.example", content: envExample},
 			{name: "Taskfile.yml", content: taskfile},
+			{name: "setup-claude-dotfiles.sh", content: setupClaudeDotfiles},
+			{name: "claude-docker-info.sh", content: claudeDockerInfo},
+			{name: "scutil", content: scutil},
+			{name: "docker", content: dockerWrapper},
 		}
 
 		changedFiles := make([]string, 0, len(files)+1)

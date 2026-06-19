@@ -148,17 +148,45 @@ task claude               # /login(初回のみ)
 |---|---|
 | `task up` | Claude / DinD コンテナを起動 |
 | `task rebuild` | ベースイメージとClaude Codeを最新版で再ビルド |
-| `task claude` | Claude Code を起動 |
+| `task dotfiles` | dotfiles の Claude Code 設定を再リンク |
+| `task prepull` | 共通イメージを案件専用 DinD キャッシュへ事前pull |
+| `task claude` | Claude Opus 4.7 1M で Claude Code を起動 |
+| `task claude-opus-4-7` | Claude Opus 4.7 1M で Claude Code を起動 |
 | `task shell` | Claude コンテナの bash を開く |
+| `task dev` | Claude コンテナ内で `pnpm dev` を実行 |
 | `task tmux` | 永続 tmux セッションへ接続 |
 | `task gh-login` | GitHub CLI にログイン |
 | `task logs` | Compose ログを追跡 |
 | `task ps` | コンテナ状態を表示 |
+| `task versions` | Claude Code / uv / pnpm / Biome / Node.js のバージョンを表示 |
+| `task doctor` | claude-docker環境のハッシュ・認証状態を表示 |
 | `task down` | コンテナを停止・削除 |
+
+`task shell`、`task claude`、`task claude-opus-4-7`、`task dev` などの exec 系タスクは、
+コンテナが未起動なら先に `task up` を実行する。
+`task claude` と `task claude-opus-4-7` は起動前に `task doctor` を実行し、
+ホスト側マニフェストとコンテナイメージ内マニフェストのハッシュを表示する。
+`claude` コンテナ内の Docker CLI は wrapper 経由で dind を操作する。`DOCKER_HOST` は
+Claude Code プロセス全体には渡さないため、Claude Code からは通常のコンテナ内 CLI として見える。
+`task dev` は dind 内に起動した Postgres へ接続できるように、実行時だけ
+`DATABASE_URL=postgresql://postgres:postgres@dind:5432/rikudxdb` を渡す。
 
 Claude Code は推奨のネイティブインストーラーで導入する。起動時および実行中に更新を確認し、
 バックグラウンドで取得した更新は次回起動時に反映される。コンテナイメージ自体も更新する場合は
 `task rebuild` を実行する。
+`uv`、`pnpm`、Biome はイメージビルド時点の最新版をインストールするため、更新する場合も `task rebuild` を使う。
+`riku_dx_web` の `pnpm dev` を動かせるように、Python 3.13、PostgreSQL client、Tesseract 日本語OCR、
+Noto CJK fonts、ビルドツールも入れる。ホストポートは公開しないため、複数環境を同時起動しても
+ポート衝突しない。
+
+ホストの `~/dotfiles/config/claude` はコンテナ内の `/dotfiles/claude` に read-only でマウントされる。
+`settings.json` はそのままリンクせず、`remoteControlAtStartup` と `agentPushNotifEnabled` を除外した
+コンテナ用設定として `~/.claude/settings.json` に生成する。`hooks`、`statusline-command.sh`、`skills`、
+`CLAUDE.md`、`plugins/marketplaces/custom-lsp` はシンボリックリンクされる。`settings.local.json` はリンクせず、
+Claude 認証 volume 側に置く。Claude Code の初回起動状態やアカウント情報を持つ `~/.claude.json` も
+`~/.claude/.claude.json` へ移して symlink し、同じ認証 volume で永続化する。通知フックとstatusline用に
+`jq`、`python3`、`gofmt` 用の Go もコンテナへ入れる。別の場所を使う場合は生成時に
+`CLAUDE_DOTFILES_CLAUDE_DIR=/path/to/claude-config` を指定する。
 
 既存の生成先をテンプレートとの差分だけ更新する場合:
 
@@ -172,6 +200,24 @@ go run . -a gg -u ../riku_dx_web*/
 管理対象と内容のハッシュは `.claude-docker.json` に記録される。`-u` を付けない場合、
 既存の生成先は従来どおりスキップされる。生成先を Git 管理する場合も、実際に内容が
 変わったファイルだけが書き換わるため、そのまま `git diff` で確認できる。
+
+### gg環境に反映するには
+
+このリポジトリでテンプレートを変更したあと、既存の `riku_dx_web_*` 用 claude 環境へ反映する:
+
+```bash
+go run . -a gg -u ../riku_dx_web_[0-9]/
+```
+
+Dockerfile が変わった場合は、各生成先でリビルドする:
+
+```bash
+cd ../riku_dx_web_0-claude
+task rebuild
+
+cd ../riku_dx_web_1-claude
+task rebuild
+```
 
 非 ASCII 名の案件は、`-n` でプロジェクト名を明示(単一ディレクトリ時のみ):
 

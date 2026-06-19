@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec /usr/bin/docker -H "${DOCKER_HOST:-tcp://dind:2375}" "$@"

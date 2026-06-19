@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${1:-}" = "--get" ] && [ "${2:-}" = "ComputerName" ]; then
+  hostname
+  exit 0
+fi
+
+echo "unsupported scutil arguments: $*" >&2
+exit 1

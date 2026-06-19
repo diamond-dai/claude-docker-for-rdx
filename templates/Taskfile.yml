@@ -1,5 +1,9 @@
 version: "3"
 
+vars:
+  PREPULL_IMAGES: postgres:18-alpine
+  DEV_DATABASE_URL: postgresql://postgres:postgres@dind:5432/rikudxdb
+
 tasks:
   default:
     desc: Show available tasks
@@ -11,11 +15,32 @@ tasks:
     cmds:
       - docker compose up -d
 
+  prepull:
+    desc: Pre-pull common project images into this environment's DinD cache
+    deps: [up]
+    cmds:
+      - |
+        docker compose exec claude bash -lc '
+          set -euo pipefail
+          for i in {1..30}; do
+            docker info >/dev/null 2>&1 && break
+            sleep 1
+          done
+          for image in {{.PREPULL_IMAGES}}; do
+            docker image inspect "$image" >/dev/null 2>&1 || docker pull "$image"
+          done
+        '
+
   rebuild:
     desc: Rebuild Claude Code with the latest native installer
     cmds:
       - docker compose build --pull --no-cache claude
       - docker compose up -d --force-recreate claude
+
+  dotfiles:
+    desc: Re-link Claude Code settings from dotfiles
+    cmds:
+      - docker compose exec claude setup-claude-dotfiles
 
   down:
     desc: Stop and remove the containers
@@ -27,6 +52,21 @@ tasks:
     cmds:
       - docker compose ps
 
+  versions:
+    desc: Show tool versions
+    deps: [up]
+    cmds:
+      - docker compose exec claude bash -lc 'claude --version && uv --version && pnpm --version && biome --version && node --version'
+
+  doctor:
+    desc: Show claude-docker identity and auth status
+    deps: [up]
+    cmds:
+      - |
+        printf "host_manifest_sha256: "
+        sha256sum .claude-docker.json | awk '{print $1}'
+      - docker compose exec claude claude-docker-info
+
   logs:
     desc: Follow container logs
     cmds:
@@ -34,24 +74,44 @@ tasks:
 
   shell:
     desc: Open a shell in the Claude container
+    deps: [up]
     interactive: true
     cmds:
       - docker compose exec claude bash
 
-  claude:
-    desc: Start Claude Code in the project workspace
+  dev:
+    desc: Run pnpm dev inside the Claude container
+    deps: [up]
     interactive: true
     cmds:
-      - docker compose exec claude claude
+      - docker compose exec claude bash -lc 'cd /workspace && DATABASE_URL="{{.DEV_DATABASE_URL}}" POSTGRES_HOST=dind pnpm dev'
+
+  claude:
+    desc: Start Claude Code with Claude Opus 4.7 1M in the project workspace
+    deps: [up]
+    interactive: true
+    cmds:
+      - task doctor
+      - docker compose exec claude claude --model 'claude-opus-4-7[1m]'
+
+  claude-opus-4-7:
+    desc: Start Claude Code with Claude Opus 4.7 1M
+    deps: [up]
+    interactive: true
+    cmds:
+      - task doctor
+      - docker compose exec claude claude --model 'claude-opus-4-7[1m]'
 
   tmux:
     desc: Attach to the persistent Claude tmux session
+    deps: [up]
     interactive: true
     cmds:
       - docker compose exec claude tmux new -A -s claude
 
   gh-login:
     desc: Log in to GitHub CLI
+    deps: [up]
     interactive: true
     cmds:
       - docker compose exec claude gh auth login
