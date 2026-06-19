@@ -15,6 +15,24 @@ mkdir -p "$state_root"
 
 backup_root="${dst_root}/.claude-docker-backup/$(date +%Y%m%d%H%M%S)"
 
+migrate_legacy_paths() {
+  local file tmp
+
+  for file in \
+    "${dst_root}/plugins/known_marketplaces.json" \
+    "${dst_root}/plugins/installed_plugins.json"
+  do
+    [ -f "$file" ] || continue
+    grep -q '/home/node/.claude' "$file" || continue
+
+    mkdir -p "${backup_root}/plugins"
+    cp "$file" "${backup_root}/plugins/$(basename "$file")"
+    tmp="$(mktemp)"
+    sed "s#/home/node/.claude#${dst_root}#g" "$file" > "$tmp"
+    mv "$tmp" "$file"
+  done
+}
+
 persist_global_config() {
   local src="${HOME}/.claude.json"
   local dst="${state_root}/.claude.json"
@@ -97,6 +115,7 @@ write_container_settings() {
 }
 
 persist_global_config
+migrate_legacy_paths
 write_container_settings
 link_item "hooks"
 link_item "statusline-command.sh"
