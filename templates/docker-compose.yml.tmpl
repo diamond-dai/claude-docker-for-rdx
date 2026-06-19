@@ -6,6 +6,8 @@ services:
     build: .
     command: sleep infinity  # tmux を生かし続ける(exec で入る)。dotfiles setup は task up で実行する。
     environment:
+      - TERM=xterm-256color
+      - COLORTERM=truecolor
       - SSH_AUTH_SOCK=/ssh-agent         # git の ssh はホストの agent に委譲
       - GH_TOKEN=${GH_TOKEN:-}           # 任意: PATが取れる場合のみ(空ならgh auth loginを使う)
       - CLAUDE_DOTFILES_DIR=/dotfiles/claude
