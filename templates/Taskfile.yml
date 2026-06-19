@@ -15,7 +15,7 @@ tasks:
     desc: Start the Claude and DinD containers
     cmds:
       - docker compose up -d
-      - docker compose exec -u root claude chown -R node:node /workspace/node_modules /workspace/apps/frontend/node_modules /workspace/apps/frontend/.next /workspace/apps/backend/.venv /workspace/.pnpm-store /workspace/.turbo /workspace/apps/backend/.turbo /workspace/.ruff_cache /workspace/apps/backend/.pytest_cache /workspace/apps/backend/.ruff_cache /workspace/apps/frontend/.ruff_cache
+      - docker compose exec -u root claude chown -R user:user /workspace/node_modules /workspace/.venv /workspace/.pnpm-store /workspace/.turbo /workspace/.ruff_cache /home/user/go /home/user/.cache/go-build /workspace/apps/frontend/node_modules /workspace/apps/frontend/.next /workspace/apps/backend/.venv /workspace/apps/backend/.turbo /workspace/apps/backend/.pytest_cache /workspace/apps/backend/.ruff_cache /workspace/apps/frontend/.ruff_cache
 
   prepull:
     desc: Pre-pull common project images into this environment's DinD cache

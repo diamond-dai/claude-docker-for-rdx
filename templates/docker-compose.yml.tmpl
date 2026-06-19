@@ -22,27 +22,33 @@ services:
       - PYTHONDONTWRITEBYTECODE=1
     volumes:
       - __PROJECT__:/workspace                     # 隣の案件リポジトリ(ソース共有)
-      # macOS ホストと Linux コンテナで依存ディレクトリを共有しない。
-      # 共有すると .venv や native package が片方の環境向けに壊れる。
+
+      # ---- 汎用: 言語/ツール別の依存・ビルドキャッシュ ----
+      # macOS ホストと Linux コンテナで node_modules / .venv / native cache を共有しない。
+      # 別プロジェクトでもよく使う root レイアウト向けの隔離先。
       - root-node-modules:/workspace/node_modules
+      - root-venv:/workspace/.venv
+      - pnpm-store:/workspace/.pnpm-store
+      - root-turbo:/workspace/.turbo
+      - root-ruff-cache:/workspace/.ruff_cache
+      - go-mod-cache:/home/user/go/pkg/mod
+      - go-build-cache:/home/user/.cache/go-build
+
+      # ---- riku_dx_web 固有: monorepo 配下の生成物・キャッシュ ----
       - frontend-node-modules:/workspace/apps/frontend/node_modules
       - frontend-next:/workspace/apps/frontend/.next
       - backend-venv:/workspace/apps/backend/.venv
-      - pnpm-store:/workspace/.pnpm-store
-      # 環境差のあるキャッシュもコンテナ専用にする。
-      - root-turbo:/workspace/.turbo
       - backend-turbo:/workspace/apps/backend/.turbo
-      - root-ruff-cache:/workspace/.ruff_cache
       - backend-pytest-cache:/workspace/apps/backend/.pytest_cache
       - backend-ruff-cache:/workspace/apps/backend/.ruff_cache
       - frontend-ruff-cache:/workspace/apps/frontend/.ruff_cache
-      - __ACCT__-claude-enterprise:/home/node/.claude    # エンタープライズ認証(account内で共有)
-      - __ACCT__-gh-config:/home/node/.config/gh         # gh auth login の保存先(account内で共有)
+      - __ACCT__-claude-enterprise:/home/user/.claude    # エンタープライズ認証(account内で共有)
+      - __ACCT__-gh-config:/home/user/.config/gh         # gh auth login の保存先(account内で共有)
       - __CLAUDE_DOTFILES__:/dotfiles/claude:ro           # dotfiles の Claude Code 設定
       - ${HOST_SSH_AUTH_SOCK:-/run/host-services/ssh-auth.sock}:/ssh-agent
       # github-gg エイリアスをコンテナ内でも使う場合のみ(パスは環境に合わせる):
-      # - ~/.ssh/config:/home/node/.ssh/config:ro
-      # - ~/ssh_keys/gg/gg-github/gg-git_id_ed25519.pub:/home/node/ssh_keys/gg/gg-github/gg-git_id_ed25519.pub:ro
+      # - ~/.ssh/config:/home/user/.ssh/config:ro
+      # - ~/ssh_keys/gg/gg-github/gg-git_id_ed25519.pub:/home/user/ssh_keys/gg/gg-github/gg-git_id_ed25519.pub:ro
     working_dir: /workspace
     depends_on: [dind]
 
@@ -61,16 +67,21 @@ volumes:
   # ※ 2つのデーモンで /var/lib/docker を共有すると破損するため絶対に external 共有しない。
   dind-storage:
 
-  # claude コンテナ専用の依存キャッシュ。プロジェクト bind mount より優先して
-  # ホスト側 node_modules / .venv を隠す。
+  # ---- 汎用: 言語/ツール別の依存・ビルドキャッシュ ----
+  # プロジェクト bind mount より優先して、ホスト側の生成物を隠す。
   root-node-modules:
+  root-venv:
+  pnpm-store:
+  root-turbo:
+  root-ruff-cache:
+  go-mod-cache:
+  go-build-cache:
+
+  # ---- riku_dx_web 固有: monorepo 配下の生成物・キャッシュ ----
   frontend-node-modules:
   frontend-next:
   backend-venv:
-  pnpm-store:
-  root-turbo:
   backend-turbo:
-  root-ruff-cache:
   backend-pytest-cache:
   backend-ruff-cache:
   frontend-ruff-cache:
