@@ -22,6 +22,26 @@ echo "  DOCKER_HOST: ${DOCKER_HOST:-unset}"
 echo "  docker_cli: $(command -v docker 2>/dev/null || printf 'missing')"
 
 echo
+echo "ssh-agent:"
+echo "  SSH_AUTH_SOCK: ${SSH_AUTH_SOCK:-unset}"
+ssh_sock="${SSH_AUTH_SOCK:-/ssh-agent}"
+if [ -S "$ssh_sock" ]; then
+  echo "  socket: $(ls -l "$ssh_sock" 2>/dev/null | awk '{print $1, $3":"$4}')"
+  if out="$(ssh-add -l 2>&1)"; then
+    echo "  identities: $(printf '%s\n' "$out" | grep -c .) key(s) loaded"
+  else
+    rc=$?
+    if [ "$rc" = 1 ]; then
+      echo "  identities: 0 — ホスト側で 'ssh-add <git 秘密鍵>' を実行してください"
+    else
+      echo "  identities: 接続不可 ($out) — task up でソケット権限を直すか agent 転送を確認"
+    fi
+  fi
+else
+  echo "  socket: missing — agent 転送が無効(ホストの ssh-agent 起動と SSH_AUTH_SOCK を確認)"
+fi
+
+echo
 echo "claude:"
 if [ -e "${HOME}/.claude.json" ]; then
   echo "  global_config: ${HOME}/.claude.json -> $(readlink "${HOME}/.claude.json" 2>/dev/null || printf 'regular-file')"

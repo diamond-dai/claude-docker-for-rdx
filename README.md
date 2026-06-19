@@ -65,9 +65,17 @@ docker volume create gg-gh-config
 
 # (2) git: gg の鍵を agent に登録(秘密鍵はコンテナに入れない)
 #     ※ コンテナを「gg だけ」にしたいので、gg の鍵だけ乗せるのが安全。
-eval "$(ssh-agent -s)"
-ssh-add ~/ssh_keys/gg/gg-github/gg-git_id_ed25519
+#
+# macOS(Docker Desktop):
+#   コンテナへ転送されるのは「既定の agent(launchd/keychain)」だけ。
+#   `eval "$(ssh-agent -s)"` で別 agent を立てると Docker Desktop は転送しないので使わない。
+ssh-add ~/ssh_keys/gg/gg-github/gg-git_id_ed25519   # --apple-use-keychain も可
+ssh-add -l                                          # 0 件だと転送されない(必ず確認)
 ```
+
+> 確認: `task up` 後に `task doctor` の `ssh-agent:` 行を見る。
+> `identities: 0` ならホストの `ssh-add` が効いていない(別 agent に入れていないか確認)。
+> `identities: 接続不可` ならソケット権限の問題で、`task up` が `/ssh-agent` を user 所有に直す。
 
 > **account prefix について(= アカウントの切り替え・必須)**
 > 共有 volume とプロジェクト名には account prefix が付く。`claude-docker` 自体は1つで、
