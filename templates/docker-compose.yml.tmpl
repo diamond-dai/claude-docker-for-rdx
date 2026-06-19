@@ -19,14 +19,23 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@dind:5432/rikudxdb
       - BACKEND_URL=http://localhost:8000
       - UV_LINK_MODE=copy
+      - PYTHONDONTWRITEBYTECODE=1
     volumes:
       - __PROJECT__:/workspace                     # 隣の案件リポジトリ(ソース共有)
       # macOS ホストと Linux コンテナで依存ディレクトリを共有しない。
       # 共有すると .venv や native package が片方の環境向けに壊れる。
       - root-node-modules:/workspace/node_modules
       - frontend-node-modules:/workspace/apps/frontend/node_modules
+      - frontend-next:/workspace/apps/frontend/.next
       - backend-venv:/workspace/apps/backend/.venv
       - pnpm-store:/workspace/.pnpm-store
+      # 環境差のあるキャッシュもコンテナ専用にする。
+      - root-turbo:/workspace/.turbo
+      - backend-turbo:/workspace/apps/backend/.turbo
+      - root-ruff-cache:/workspace/.ruff_cache
+      - backend-pytest-cache:/workspace/apps/backend/.pytest_cache
+      - backend-ruff-cache:/workspace/apps/backend/.ruff_cache
+      - frontend-ruff-cache:/workspace/apps/frontend/.ruff_cache
       - __ACCT__-claude-enterprise:/home/node/.claude    # エンタープライズ認証(account内で共有)
       - __ACCT__-gh-config:/home/node/.config/gh         # gh auth login の保存先(account内で共有)
       - __CLAUDE_DOTFILES__:/dotfiles/claude:ro           # dotfiles の Claude Code 設定
@@ -56,8 +65,15 @@ volumes:
   # ホスト側 node_modules / .venv を隠す。
   root-node-modules:
   frontend-node-modules:
+  frontend-next:
   backend-venv:
   pnpm-store:
+  root-turbo:
+  backend-turbo:
+  root-ruff-cache:
+  backend-pytest-cache:
+  backend-ruff-cache:
+  frontend-ruff-cache:
 
   # 認証は同じ account のプロジェクトで共有 + 誤削除防止のため external。
   # 初回に手動作成:  docker volume create __ACCT__-claude-enterprise
