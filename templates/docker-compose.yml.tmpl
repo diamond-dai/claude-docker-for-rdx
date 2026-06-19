@@ -50,9 +50,8 @@ services:
       - __ACCT__-gh-config:/home/user/.config/gh         # gh auth login の保存先(account内で共有)
       - __CLAUDE_DOTFILES__:/dotfiles/claude:ro           # dotfiles の Claude Code 設定
       - ${HOST_SSH_AUTH_SOCK:-/run/host-services/ssh-auth.sock}:/ssh-agent
-      # github-gg エイリアスをコンテナ内でも使う場合のみ(パスは環境に合わせる):
-      # - ~/.ssh/config:/home/user/.ssh/config:ro
-      # - ~/ssh_keys/gg/gg-github/gg-git_id_ed25519.pub:/home/user/ssh_keys/gg/gg-github/gg-git_id_ed25519.pub:ro
+      # github-gg 等の SSH エイリアスはイメージ側の ~/.ssh/config で github.com へ
+      # 解決済み(Dockerfile 参照)。host の config をマウントする必要は無い。
     working_dir: /workspace
     depends_on: [dind]
 

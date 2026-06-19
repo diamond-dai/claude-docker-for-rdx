@@ -32,10 +32,21 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
  && apt-get update && apt-get install -y --no-install-recommends gh \
  && rm -rf /var/lib/apt/lists/*
 
-# ---- 認証情報ディレクトリ + known_hosts ----
+# ---- 認証情報ディレクトリ + known_hosts + ssh エイリアス ----
 # ※ private な git サーバを使う場合は github.com を案件のホストに差し替える。
+# host の ~/.ssh/config にある github-gg 等のエイリアスはコンテナに無いので、
+# ここで github.com へ解決する最小 config を焼き込む。鍵は SSH_AUTH_SOCK で
+# 転送された host の ssh-agent を使う(IdentityFile は指定しない)。
 RUN mkdir -p /home/user/.claude /home/user/.config/gh /home/user/.ssh \
  && ssh-keyscan github.com >> /home/user/.ssh/known_hosts 2>/dev/null || true \
+ && printf '%s\n' \
+      '# host の ssh config エイリアスをコンテナ内でも解決する。' \
+      '# 鍵は転送された ssh-agent を使うため IdentityFile は指定しない。' \
+      'Host github-gg github' \
+      '  HostName github.com' \
+      '  User git' \
+    > /home/user/.ssh/config \
+ && chmod 600 /home/user/.ssh/config \
  && chown -R user:user /home/user/.claude /home/user/.config /home/user/.ssh \
  && chmod 700 /home/user/.ssh
 

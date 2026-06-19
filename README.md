@@ -105,9 +105,10 @@ ssh-add ~/ssh_keys/gg/gg-github/gg-git_id_ed25519
   ssh-agent -a "$HOST_SSH_AUTH_SOCK" >/dev/null
   SSH_AUTH_SOCK="$HOST_SSH_AUTH_SOCK" ssh-add ~/ssh_keys/gg/gg-github/gg-git_id_ed25519
   ```
-- **どの OS でも / エイリアスを使いたい**: `~/.ssh/config` と `.pub` をコンテナに read-only マウント
-  (compose のコメント参照)し、`git@github-gg:...` を使う。`IdentitiesOnly yes` で gg に固定される。
-  ※ macOS/Windows の Docker Desktop は任意 socket の転送ができないため、こちらが確実。
+- **どの OS でも / エイリアスを使いたい**: `git@github-gg:...` の `github-gg` は
+  イメージ側の `~/.ssh/config` で `github.com` へ解決済み(Dockerfile 参照)なので、
+  リポジトリの remote がエイリアスのままでも push できる。鍵の選択は agent の中身次第なので、
+  gg 以外の鍵も混ざるなら上の Linux 方式で gg 専用 agent を立てるのが確実。
 
 ### gh を会社アカウントにする(PAT 不要)
 
