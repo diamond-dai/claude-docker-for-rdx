@@ -3,6 +3,7 @@ version: "3"
 vars:
   PREPULL_IMAGES: postgres:18-alpine
   DEV_DATABASE_URL: postgresql://postgres:postgres@dind:5432/rikudxdb
+  TERMINAL_RESET: "printf '\\033[?1000l\\033[?1002l\\033[?1003l\\033[?1006l\\033[?1015l\\033[?1004l\\033[?2004l\\033[0m' >/dev/tty 2>/dev/null || true; stty sane 2>/dev/null || true"
 
 tasks:
   default:
@@ -46,6 +47,7 @@ tasks:
   down:
     desc: Stop and remove the containers
     cmds:
+      - "{{.TERMINAL_RESET}}"
       - docker compose down
 
   ps:
@@ -93,7 +95,20 @@ tasks:
     interactive: true
     cmds:
       - task doctor
-      - docker compose exec claude claude --model 'claude-opus-4-7[1m]'
+      - |
+        {{.TERMINAL_RESET}}
+        docker compose exec claude bash -lc '
+          cleanup() {
+            printf "\033[?1000l\033[?1002l\033[?1003l\033[?1006l\033[?1015l\033[?1004l\033[?2004l\033[0m" >/dev/tty 2>/dev/null || true
+            stty sane 2>/dev/null || true
+          }
+          trap cleanup EXIT INT TERM HUP
+          cleanup
+          claude --model "claude-opus-4-7[1m]"
+        '
+        status=$?
+        {{.TERMINAL_RESET}}
+        exit $status
 
   claude-opus-4-7:
     desc: Start Claude Code with Claude Opus 4.7 1M
@@ -101,7 +116,20 @@ tasks:
     interactive: true
     cmds:
       - task doctor
-      - docker compose exec claude claude --model 'claude-opus-4-7[1m]'
+      - |
+        {{.TERMINAL_RESET}}
+        docker compose exec claude bash -lc '
+          cleanup() {
+            printf "\033[?1000l\033[?1002l\033[?1003l\033[?1006l\033[?1015l\033[?1004l\033[?2004l\033[0m" >/dev/tty 2>/dev/null || true
+            stty sane 2>/dev/null || true
+          }
+          trap cleanup EXIT INT TERM HUP
+          cleanup
+          claude --model "claude-opus-4-7[1m]"
+        '
+        status=$?
+        {{.TERMINAL_RESET}}
+        exit $status
 
   tmux:
     desc: Attach to the persistent Claude tmux session
@@ -109,6 +137,12 @@ tasks:
     interactive: true
     cmds:
       - docker compose exec claude tmux new -A -s claude
+
+  reset-terminal:
+    desc: Reset terminal modes after a crashed TUI
+    interactive: true
+    cmds:
+      - "{{.TERMINAL_RESET}}"
 
   gh-login:
     desc: Log in to GitHub CLI
