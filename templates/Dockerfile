@@ -2,7 +2,7 @@ FROM debian:bookworm-slim
 
 ENV PNPM_HOME=/home/user/.local/share/pnpm
 ENV MISE_INSTALL_PATH=/home/user/.local/bin/mise
-ENV PATH="/home/user/.local/bin:/home/user/.local/share/mise/shims:${PNPM_HOME}/bin:${PATH}"
+ENV PATH="/home/user/.local/bin:/home/user/.local/share/mise/shims:${PNPM_HOME}:${PATH}"
 
 # ---- 基本ツール + Docker CLI(dindデーモン操作用) + tmux + ssh ----
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -49,7 +49,7 @@ RUN chmod 755 /usr/local/bin/setup-claude-dotfiles /usr/local/bin/claude-docker-
  && ln -s /home/user/.claude /Users/dai/.claude \
  && printf '%s\n' \
       'export PNPM_HOME=/home/user/.local/share/pnpm' \
-      'export PATH=/home/user/.local/bin:/home/user/.local/share/mise/shims:${PNPM_HOME}/bin:${PATH}' \
+      'export PATH=/home/user/.local/bin:/home/user/.local/share/mise/shims:${PNPM_HOME}:${PATH}' \
       > /etc/profile.d/claude-docker-path.sh
 
 USER user
@@ -66,10 +66,7 @@ ENV UV_HTTP_TIMEOUT=120 \
 # riku_dx_web は Node/pnpm と Go を使うため、現テンプレートではここで入れる。
 RUN curl https://mise.run | sh \
  && mise use -g node@24 go@latest \
- && corepack enable \
- && corepack prepare pnpm@latest --activate \
- && mise reshim node@24 \
- && mkdir -p "${PNPM_HOME}/bin" \
+ && curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=9.15.0 SHELL="$(command -v bash)" sh - \
  && pnpm add -g @biomejs/biome
 
 # ---- Claude Code (native installer; background auto-update対応) ----
