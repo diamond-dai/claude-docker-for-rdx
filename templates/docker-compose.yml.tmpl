@@ -9,6 +9,15 @@ services:
       - SSH_AUTH_SOCK=/ssh-agent         # git の ssh はホストの agent に委譲
       - GH_TOKEN=${GH_TOKEN:-}           # 任意: PATが取れる場合のみ(空ならgh auth loginを使う)
       - CLAUDE_DOTFILES_DIR=/dotfiles/claude
+      # riku_dx_web の pnpm dev は dind 上に postgres を起動する。
+      # claude コンテナ内の localhost ではなく、隣の dind コンテナへ接続する。
+      - POSTGRES_HOST=dind
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=rikudxdb
+      - DATABASE_URL=postgresql://postgres:postgres@dind:5432/rikudxdb
+      - BACKEND_URL=http://localhost:8000
     volumes:
       - __PROJECT__:/workspace                     # 隣の案件リポジトリ(ソース共有)
       - __ACCT__-claude-enterprise:/home/node/.claude    # エンタープライズ認証(account内で共有)
