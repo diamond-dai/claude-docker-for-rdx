@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         tar xz-utils unzip \
         build-essential pkg-config libpq-dev postgresql-client \
         fonts-noto-cjk fonts-liberation tesseract-ocr tesseract-ocr-jpn tesseract-ocr-jpn-vert \
+        ripgrep fd-find bat \
         libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
         libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
         libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
@@ -26,6 +27,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ---- 非rootユーザー ----
 RUN groupadd --gid 1000 user \
  && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash user
+
+# ---- rust 系 CLI の補助: 別名 symlink + eza(apt 未提供なので release から DL) ----
+# fd-find は Debian 都合で binary 名が fdfind、bat は batcat なので
+# claude/人間が打つ素の名前で叩けるよう symlink を /usr/local/bin に置く。
+RUN ln -sf /usr/bin/fdfind /usr/local/bin/fd \
+ && ln -sf /usr/bin/batcat /usr/local/bin/bat \
+ && ARCH=$(dpkg --print-architecture) \
+ && case "$ARCH" in \
+        amd64) EZA_TARGET=x86_64-unknown-linux-gnu ;; \
+        arm64) EZA_TARGET=aarch64-unknown-linux-gnu ;; \
+        *) echo "unsupported arch: $ARCH" >&2; exit 1 ;; \
+    esac \
+ && curl -fsSL -o /tmp/eza.tar.gz \
+        "https://github.com/eza-community/eza/releases/latest/download/eza_${EZA_TARGET}.tar.gz" \
+ && tar -xzf /tmp/eza.tar.gz -C /usr/local/bin \
+ && chmod 0755 /usr/local/bin/eza \
+ && rm /tmp/eza.tar.gz
 
 # ---- GitHub CLI (gh) ----
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
