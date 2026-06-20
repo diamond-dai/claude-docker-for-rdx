@@ -164,9 +164,12 @@ tasks:
       - docker compose exec claude gh auth login
 
   # gpu-tunnel 系は「起動済みコンテナにトンネルを足す」操作なので up/build はしない。
-  # 先に task up / task claude でコンテナを立ち上げておくこと(無ければ exec が失敗する)。
+  # 未起動なら precondition で案内して止める(先に task up / task claude が必要)。
   gpu-tunnel:
     desc: Start the GPU (riku-dx-spare-gpu) port-forward 127.0.0.1:8012 (container must be up)
+    preconditions:
+      - sh: docker compose ps --services --status running | grep -q '^claude$'
+        msg: "claude コンテナが起動していません。先に `task up`(または `task claude`)で立ち上げてください。"
     cmds:
       # 鍵は転送 agent を使う。事前にホストで該当鍵を ssh-add しておくこと。
       # autossh -f が自前で background 化するので exec はすぐ戻る。
@@ -175,10 +178,16 @@ tasks:
 
   gpu-tunnel-stop:
     desc: Stop the GPU port-forward inside the container
+    preconditions:
+      - sh: docker compose ps --services --status running | grep -q '^claude$'
+        msg: "claude コンテナが起動していません(トンネルも存在しません)。先に `task up` で立ち上げてください。"
     cmds:
       - docker compose exec claude bash -lc 'pkill -f "riku-dx-spare-gpu-user" && echo stopped || echo "no tunnel running"'
 
   gpu-tunnel-status:
     desc: Show the GPU port-forward status inside the container
+    preconditions:
+      - sh: docker compose ps --services --status running | grep -q '^claude$'
+        msg: "claude コンテナが起動していません。先に `task up`(または `task claude`)で立ち上げてください。"
     cmds:
       - docker compose exec claude bash -lc 'pgrep -af "riku-dx-spare-gpu-user" || echo "no tunnel running"'
