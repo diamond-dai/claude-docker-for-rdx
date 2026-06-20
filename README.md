@@ -72,6 +72,10 @@ docker volume create gg-gh-config
 ssh-add ~/ssh_keys/gg/gg-github/gg-git_id_ed25519                      # 都度登録
 ssh-add --apple-use-keychain ~/ssh_keys/gg/gg-github/gg-git_id_ed25519 # キーチェーン保存(再起動後も自動)
 ssh-add -l                                                            # 0 件だと転送されない(必ず確認)
+
+# (3) GPU リモート(任意 / チャット機能開発で vLLM を使うときだけ)
+#     git 鍵と同様に「既定の agent」へ登録する。転送 agent 経由で task gpu-tunnel が使う。
+ssh-add --apple-use-keychain ~/ssh_keys/gg/riku-dx-spare-gpu/av_araidaisuke/riku-dx-spare-gpu_av_araidaisuke_ed25519
 ```
 
 > 確認: `task up` 後に `task doctor` の `ssh-agent:` 行を見る。
