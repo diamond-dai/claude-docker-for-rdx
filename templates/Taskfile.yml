@@ -172,9 +172,23 @@ tasks:
         msg: "claude コンテナが起動していません。先に `task up`(または `task claude`)で立ち上げてください。"
     cmds:
       # 鍵は転送 agent を使う。事前にホストで該当鍵を ssh-add しておくこと。
-      # autossh -f が自前で background 化するので exec はすぐ戻る。
-      - docker compose exec -d claude autossh -f -N -M 0 -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -o "ExitOnForwardFailure yes" -L 127.0.0.1:8012:localhost:8012 riku-dx-spare-gpu-user
-      - 'echo "GPU tunnel started: container 127.0.0.1:8012 -> riku-dx-spare-gpu:8012"'
+      # 起動判定はプロセス名 grep だと「pattern を含む自分のシェル」に self-match して
+      # 誤判定するため、実際にポート 8012 が開通したかで判定する(これが本来の成功条件)。
+      # -d で投げっぱなしにせず成否を正直に返す(失敗時に started と誤表示しない)。
+      - |
+        docker compose exec -T claude bash -lc '
+          if (echo > /dev/tcp/127.0.0.1/8012) 2>/dev/null; then
+            echo "GPU tunnel already up (127.0.0.1:8012)"; exit 0
+          fi
+          autossh -f -N -M 0 -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -o "ExitOnForwardFailure yes" -L 127.0.0.1:8012:localhost:8012 riku-dx-spare-gpu-user
+          for i in 1 2 3 4 5; do
+            (echo > /dev/tcp/127.0.0.1/8012) 2>/dev/null && { echo "GPU tunnel up: container 127.0.0.1:8012 -> riku-dx-spare-gpu:8012"; exit 0; }
+            sleep 1
+          done
+          echo "ERROR: トンネルを張れませんでした。ホストで GPU 鍵を ssh-add したか確認してください:" >&2
+          echo "  ssh-add ~/ssh_keys/gg/riku-dx-spare-gpu/av_araidaisuke/riku-dx-spare-gpu_av_araidaisuke_ed25519" >&2
+          exit 1
+        '
 
   gpu-tunnel-stop:
     desc: Stop the GPU port-forward inside the container
@@ -182,7 +196,9 @@ tasks:
       - sh: docker compose ps --services --status running | grep -q '^claude$'
         msg: "claude コンテナが起動していません(トンネルも存在しません)。先に `task up` で立ち上げてください。"
     cmds:
-      - docker compose exec claude bash -lc 'pkill -f "riku-dx-spare-gpu-user" && echo stopped || echo "no tunnel running"'
+      # pattern を含む自分の pkill シェルを巻き込まないよう [.] で self-match を回避し、
+      # 転送スペック(autossh と ssh の両方が持つ)で止める。
+      - docker compose exec claude bash -lc 'pkill -f "127[.]0[.]0[.]1:8012:localhost:8012" && echo stopped || echo "no tunnel running"'
 
   gpu-tunnel-status:
     desc: Show the GPU port-forward status inside the container
@@ -190,4 +206,4 @@ tasks:
       - sh: docker compose ps --services --status running | grep -q '^claude$'
         msg: "claude コンテナが起動していません。先に `task up`(または `task claude`)で立ち上げてください。"
     cmds:
-      - docker compose exec claude bash -lc 'pgrep -af "riku-dx-spare-gpu-user" || echo "no tunnel running"'
+      - docker compose exec claude bash -lc 'pgrep -af "127[.]0[.]0[.]1:8012:localhost:8012" || echo "no tunnel running"'
