@@ -19,7 +19,7 @@
     └── .claude-docker.json
 ```
 
-- claude コンテナ … Claude Code 本体 / tmux / git(SSH agent 転送)
+- claude コンテナ … Claude Code 本体 / tmux / git(SSH agent 転送) / Playwright Chromium(headless)
 - dind コンテナ  … 隔離された Docker デーモン。案件アプリはこの中で起動
 - `/workspace` = 隣の案件リポジトリだけ → 対象を間違えない
 
@@ -48,6 +48,25 @@ go build -o new-claude-env .
 | gh コマンド | `gh auth login`(OAuth) | `gg-gh-config` volume に保存 |
 
 git(SSH)と gh(API)は別経路。SSH キーだけでは gh は通らない(逆も同様)。
+
+## ブラウザ自動化 (Playwright / Chromium)
+
+Chromium が必要な system lib(`libnss3` / `libnspr4` 等)は Dockerfile で apt 導入済みで、
+image build 時に `playwright@latest` の Chromium も `/home/user/.cache/ms-playwright`(volume)に
+事前 install されている。コンテナ内では `headless: true` でそのまま起動できる。
+
+```bash
+docker compose exec claude bash -lc '
+  node -e "const{chromium}=require(\"playwright\");(async()=>{const b=await chromium.launch({headless:true});const p=await b.newPage();await p.goto(\"about:blank\");await b.close();console.log(\"ok\");})()"
+'
+```
+
+- `shm_size: 1gb` を compose で割り当て済み(`/dev/shm` 64MB の既定で落ちる問題への対策)
+- `PLAYWRIGHT_BROWSERS_PATH=/home/user/.cache/ms-playwright` を ENV にしてあるので、案件側で
+  `pnpm exec playwright install chromium` を再実行しても同じ場所に入る
+- 案件 `package.json` の playwright バージョンが image 焼き込み時と異なる場合は、初回起動時に
+  そのバージョンの browser が追加 DL される(layer は無駄になるが起動は通る)
+- `--no-sandbox` は強制していない。必要な案件側コードで `launch({ args: ['--no-sandbox'] })` を指定
 
 > **GitHub Enterprise の PAT について**
 > Enterprise だと fine-grained PAT は org オーナーの承認が必要で、classic PAT は禁止のことも多い。

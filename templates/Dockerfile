@@ -9,7 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg git tmux openssh-client autossh procps jq python3 bash \
         tar xz-utils unzip \
         build-essential pkg-config libpq-dev postgresql-client \
-        fonts-noto-cjk tesseract-ocr tesseract-ocr-jpn tesseract-ocr-jpn-vert \
+        fonts-noto-cjk fonts-liberation tesseract-ocr tesseract-ocr-jpn tesseract-ocr-jpn-vert \
+        libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+        libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
+        libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
+        libatspi2.0-0 libxshmfence1 \
  && install -m 0755 -d /etc/apt/keyrings \
  && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
  && chmod a+r /etc/apt/keyrings/docker.asc \
@@ -87,6 +91,14 @@ RUN curl https://mise.run | sh \
  && mise use -g node@24 go@latest \
  && curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=9.15.0 SHELL="$(command -v bash)" sh - \
  && pnpm add -g @biomejs/biome
+
+# ---- Playwright Chromium (headless 起動できる状態で焼き込む) ----
+# system lib(libnss3/libnspr4 等)は上の apt ブロックで導入済み。ここでは
+# browser binary 本体だけを image に落とす。案件側の playwright が異なる
+# バージョンを要求した場合は初回起動時に追加 DL される。
+ENV PLAYWRIGHT_BROWSERS_PATH=/home/user/.cache/ms-playwright
+RUN mkdir -p "$PLAYWRIGHT_BROWSERS_PATH" \
+ && pnpm dlx playwright@latest install chromium
 
 # ---- Claude Code (native installer; background auto-update対応) ----
 RUN curl -fsSL https://claude.ai/install.sh | bash

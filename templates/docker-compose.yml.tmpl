@@ -5,6 +5,7 @@ services:
   claude:
     build: .
     command: sleep infinity  # tmux を生かし続ける(exec で入る)。dotfiles setup は task up で実行する。
+    shm_size: "1gb"          # Chromium が /dev/shm 64MB 既定でクラッシュするのを回避
     environment:
       - TERM=xterm-256color
       - COLORTERM=truecolor
@@ -23,6 +24,7 @@ services:
       - BACKEND_URL=http://localhost:8000
       - UV_LINK_MODE=copy
       - PYTHONDONTWRITEBYTECODE=1
+      - PLAYWRIGHT_BROWSERS_PATH=/home/user/.cache/ms-playwright
     volumes:
       - __PROJECT__:/workspace                     # 隣の案件リポジトリ(ソース共有)
 
@@ -36,6 +38,7 @@ services:
       - root-ruff-cache:/workspace/.ruff_cache
       - go-mod-cache:/home/user/go/pkg/mod
       - go-build-cache:/home/user/.cache/go-build
+      - playwright-browsers:/home/user/.cache/ms-playwright
 
       # ---- riku_dx_web 固有: monorepo 配下の生成物・キャッシュ ----
       - frontend-node-modules:/workspace/apps/frontend/node_modules
@@ -80,6 +83,7 @@ volumes:
   root-ruff-cache:
   go-mod-cache:
   go-build-cache:
+  playwright-browsers:
 
   # ---- riku_dx_web 固有: monorepo 配下の生成物・キャッシュ ----
   frontend-node-modules:
