@@ -102,7 +102,7 @@ tasks:
       - docker compose exec claude bash -lc 'cd /workspace && DATABASE_URL="{{.DEV_DATABASE_URL}}" POSTGRES_HOST=dind pnpm dev'
 
   claude:
-    desc: Start Claude Code with Claude Opus 4.7 1M in the project workspace
+    desc: Start Claude Code (新規 or 既存セッション復元)。Ctrl+C で抜けてもメニューが残る
     deps: [up]
     interactive: true
     cmds:
@@ -114,9 +114,63 @@ tasks:
             printf "\033[?1000l\033[?1002l\033[?1003l\033[?1006l\033[?1015l\033[?1004l\033[?2004l\033[0m" >/dev/tty 2>/dev/null || true
             stty sane 2>/dev/null || true
           }
-          trap cleanup EXIT INT TERM HUP
+          # SIGINT/SIGTERM はメニューに戻すだけ。bash 自体は落とさない。
+          trap cleanup EXIT HUP
+          trap "cleanup" INT TERM
           cleanup
-          claude ${CLAUDE_ENV_NAME:+--name "$CLAUDE_ENV_NAME"} --model "claude-opus-4-7[1m]"
+
+          run_claude() {
+            claude ${CLAUDE_ENV_NAME:+--name "$CLAUDE_ENV_NAME"} --model "claude-opus-4-7[1m]" "$@" || true
+            cleanup
+          }
+
+          # /workspace 配下のセッション(jsonl)を数える。claude は cwd を
+          # "/" → "-" に置換したディレクトリ名で保存する(例: /workspace → -workspace)。
+          proj_key="$(pwd | sed "s|/|-|g")"
+          proj_dir="$HOME/.claude/projects/$proj_key"
+          count=0
+          if [ -d "$proj_dir" ]; then
+            count=$(find "$proj_dir" -maxdepth 1 -type f -name "*.jsonl" 2>/dev/null | wc -l | tr -d " ")
+          fi
+
+          # セッション0件: 旧挙動(即 claude、終了で host shell に戻る)
+          if [ "$count" -eq 0 ]; then
+            run_claude
+            exit 0
+          fi
+
+          # セッション1件以上: メニューを出して、claude 終了後もメニューに戻る
+          while :; do
+            count=0
+            if [ -d "$proj_dir" ]; then
+              count=$(find "$proj_dir" -maxdepth 1 -type f -name "*.jsonl" 2>/dev/null | wc -l | tr -d " ")
+            fi
+
+            printf "\n"
+            printf "===== Claude Code (workspace: %s) =====\n" "$(pwd)"
+            printf "  saved sessions: %s\n" "$count"
+            printf "  [n] new session\n"
+            printf "  [r] resume (picker)\n"
+            printf "  [c] continue most recent\n"
+            printf "  [s] shell (container bash)\n"
+            printf "  [q] quit\n"
+            printf "choice: "
+
+            if ! read -r choice; then
+              # EOF (Ctrl+D) → quit
+              printf "\n"
+              break
+            fi
+
+            case "$choice" in
+              n|N|"")  run_claude ;;
+              r|R)     run_claude --resume ;;
+              c|C)     run_claude --continue ;;
+              s|S)     bash -l || true; cleanup ;;
+              q|Q)     break ;;
+              *)       printf "unknown choice: %s\n" "$choice" ;;
+            esac
+          done
         '
         status=$?
         {{.TERMINAL_RESET}}
