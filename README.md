@@ -201,6 +201,9 @@ task claude               # /login(初回のみ)
 | `task dev` | Claude コンテナ内で `pnpm dev` を実行 |
 | `task tmux` | 永続 tmux セッションへ接続 |
 | `task gh-login` | GitHub CLI にログイン |
+| `task gpu-tunnel` | GPU リモートへ `127.0.0.1:8012` のトンネルを張る(起動済み前提) |
+| `task gpu-tunnel-status` | GPU トンネルの状態を表示 |
+| `task gpu-tunnel-stop` | GPU トンネルを停止 |
 | `task logs` | Compose ログを追跡 |
 | `task ps` | コンテナ状態を表示 |
 | `task versions` | Claude Code / uv / pnpm / Biome / Node.js のバージョンを表示 |
@@ -211,6 +214,10 @@ task claude               # /login(初回のみ)
 コンテナが未起動なら先に `task up` を実行する。
 `task claude` と `task claude-opus-4-7` は起動前に `task doctor` を実行し、
 ホスト側マニフェストとコンテナイメージ内マニフェストのハッシュを表示する。
+これらは `claude --name "$CLAUDE_ENV_NAME"`(例: `gg-riku_dx_web_1`)で起動するため、
+セッション表示名・ターミナルタイトル・**スマホへの push 通知**に案件名(account付き)が出る。
+複数コンテナを並行で動かしてもどの案件の通知かを判別できる。`CLAUDE_ENV_NAME` は
+compose の environment で `<account>-<案件名>` が渡る(env を変えるとコンテナ再作成が必要)。
 `claude` コンテナ内の Docker CLI は wrapper 経由で dind を操作する。`DOCKER_HOST` は
 Claude Code プロセス全体には渡さないため、Claude Code からは通常のコンテナ内 CLI として見える。
 `task dev` は dind 内に起動した Postgres へ接続できるように、実行時だけ

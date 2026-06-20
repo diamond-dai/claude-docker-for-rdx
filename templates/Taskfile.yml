@@ -116,7 +116,7 @@ tasks:
           }
           trap cleanup EXIT INT TERM HUP
           cleanup
-          claude --model "claude-opus-4-7[1m]"
+          claude ${CLAUDE_ENV_NAME:+--name "$CLAUDE_ENV_NAME"} --model "claude-opus-4-7[1m]"
         '
         status=$?
         {{.TERMINAL_RESET}}
@@ -137,7 +137,7 @@ tasks:
           }
           trap cleanup EXIT INT TERM HUP
           cleanup
-          claude --model "claude-opus-4-7[1m]"
+          claude ${CLAUDE_ENV_NAME:+--name "$CLAUDE_ENV_NAME"} --model "claude-opus-4-7[1m]"
         '
         status=$?
         {{.TERMINAL_RESET}}

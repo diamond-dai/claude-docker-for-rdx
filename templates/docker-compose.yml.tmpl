@@ -11,6 +11,7 @@ services:
       - SSH_AUTH_SOCK=/ssh-agent         # git の ssh はホストの agent に委譲
       - GH_TOKEN=${GH_TOKEN:-}           # 任意: PATが取れる場合のみ(空ならgh auth loginを使う)
       - CLAUDE_DOTFILES_DIR=/dotfiles/claude
+      - CLAUDE_ENV_NAME=__ACCT_PROJECT__ # claude --name 用(push通知/ターミナルタイトルに案件名)
       # riku_dx_web の pnpm dev は dind 上に postgres を起動する。
       # claude コンテナ内の localhost ではなく、隣の dind コンテナへ接続する。
       - POSTGRES_HOST=dind

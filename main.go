@@ -213,6 +213,7 @@ func main() {
 			"__PROJECT__", "../"+name,
 			"__ENVNAME__", fullName,
 			"__ACCT__", acct,
+			"__ACCT_PROJECT__", acct+"-"+sanitize(base), // 通知/ターミナルタイトル用(例: gg-riku_dx_web_1)
 			"__CLAUDE_DOTFILES__", claudeDotfilesDir,
 		).Replace(composeTmpl)
 
