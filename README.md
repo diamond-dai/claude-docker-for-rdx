@@ -138,6 +138,33 @@ docker compose exec claude gh auth login
 - どうしても PAT を使う場合(承認が取れる/CI 用途)だけ、`export GH_TOKEN=...` で起動すれば
   そちらが優先される(`gh auth login` 不要)。
 
+### GPU リモートへポートフォワード(riku-dx-spare-gpu)
+
+コンテナ内から GPU box(`riku-dx-spare-gpu-user`)へ `autossh` でトンネルを張り、
+`127.0.0.1:8012` を GPU 側の `localhost:8012` に転送する。鍵は **転送された ssh-agent** を使う
+(コンテナに秘密鍵は入れない)。エイリアスと `autossh` はイメージに同梱済み。
+
+```bash
+# (前提) ホストで GPU 鍵を agent に登録(git 鍵と同様、--apple-use-keychain で永続化)
+ssh-add --apple-use-keychain ~/ssh_keys/gg/riku-dx-spare-gpu/av_araidaisuke/riku-dx-spare-gpu_av_araidaisuke_ed25519
+
+# トンネル起動 / 状態 / 停止
+task gpu-tunnel
+task gpu-tunnel-status
+task gpu-tunnel-stop
+```
+
+`task gpu-tunnel` は実体としてコンテナ内で次を実行する(手動で叩いても同じ):
+
+```bash
+autossh -f -N -M 0 \
+  -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -o "ExitOnForwardFailure yes" \
+  -L 127.0.0.1:8012:localhost:8012 riku-dx-spare-gpu-user
+```
+
+> 別の GPU ホスト/ポートを使う場合は、イメージの `~/.ssh/config`(Dockerfile)の
+> `Host riku-dx-spare-gpu-user` ブロックと、Taskfile の `gpu-tunnel` の転送先を変える。
+
 ## 使い方
 
 ```bash

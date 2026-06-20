@@ -162,3 +162,23 @@ tasks:
     interactive: true
     cmds:
       - docker compose exec claude gh auth login
+
+  gpu-tunnel:
+    desc: Start the GPU (riku-dx-spare-gpu) port-forward 127.0.0.1:8012 inside the container
+    deps: [up]
+    cmds:
+      # 鍵は転送 agent を使う。事前にホストで該当鍵を ssh-add しておくこと。
+      # autossh -f が自前で background 化するので exec はすぐ戻る。
+      - docker compose exec -d claude autossh -f -N -M 0 -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -o "ExitOnForwardFailure yes" -L 127.0.0.1:8012:localhost:8012 riku-dx-spare-gpu-user
+      - 'echo "GPU tunnel started: container 127.0.0.1:8012 -> riku-dx-spare-gpu:8012"'
+
+  gpu-tunnel-stop:
+    desc: Stop the GPU port-forward inside the container
+    cmds:
+      - docker compose exec claude bash -lc 'pkill -f "riku-dx-spare-gpu-user" && echo stopped || echo "no tunnel running"'
+
+  gpu-tunnel-status:
+    desc: Show the GPU port-forward status inside the container
+    deps: [up]
+    cmds:
+      - docker compose exec claude bash -lc 'pgrep -af "riku-dx-spare-gpu-user" || echo "no tunnel running"'

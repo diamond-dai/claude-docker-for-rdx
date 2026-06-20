@@ -6,7 +6,7 @@ ENV PATH="/home/user/.local/bin:/home/user/.local/share/mise/shims:${PNPM_HOME}:
 
 # ---- 基本ツール + Docker CLI(dindデーモン操作用) + tmux + ssh ----
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl gnupg git tmux openssh-client jq python3 bash \
+        ca-certificates curl gnupg git tmux openssh-client autossh procps jq python3 bash \
         tar xz-utils unzip \
         build-essential pkg-config libpq-dev postgresql-client \
         fonts-noto-cjk tesseract-ocr tesseract-ocr-jpn tesseract-ocr-jpn-vert \
@@ -45,6 +45,14 @@ RUN mkdir -p /home/user/.claude /home/user/.config/gh /home/user/.ssh \
       'Host github-gg github' \
       '  HostName github.com' \
       '  User git' \
+      '' \
+      '# GPU リモート(riku-dx-spare-gpu)。鍵は転送された ssh-agent を使う。' \
+      '# 利用前にホストで:  ssh-add ~/ssh_keys/gg/riku-dx-spare-gpu/av_araidaisuke/riku-dx-spare-gpu_av_araidaisuke_ed25519' \
+      'Host riku-dx-spare-gpu-user' \
+      '  HostName 211.14.11.141' \
+      '  Port 3331' \
+      '  User av_araidaisuke' \
+      '  StrictHostKeyChecking accept-new' \
     > /home/user/.ssh/config \
  && chmod 600 /home/user/.ssh/config \
  && chown -R user:user /home/user/.claude /home/user/.config /home/user/.ssh \
