@@ -125,10 +125,21 @@ persist_global_config
 migrate_legacy_paths
 write_container_settings
 link_item "hooks"
-link_item "statusline-command.sh"
-link_item "statusline.py"
 link_item "skills"
 link_item "CLAUDE.md"
+
+# statusline: container 専用 wrapper を実体として配置する。
+# 案件リポの .claude/settings.local.json が `bash ~/.claude/statusline-command.sh`
+# を呼ぶケースを取り込むため、user settings の statusLine override だけでは不十分。
+# dotfiles 側の statusline-command.sh / statusline.py は host 用なので link しない。
+if [ -x /usr/local/bin/claude-statusline ]; then
+  rm -f "${dst_root}/statusline-command.sh" "${dst_root}/statusline.py"
+  cat > "${dst_root}/statusline-command.sh" <<'EOF'
+#!/usr/bin/env bash
+exec /usr/local/bin/claude-statusline
+EOF
+  chmod 755 "${dst_root}/statusline-command.sh"
+fi
 
 if [ -d "${src_root}/plugins" ]; then
   mkdir -p "${dst_root}/plugins/marketplaces"
