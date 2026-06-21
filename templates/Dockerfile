@@ -84,8 +84,9 @@ COPY setup-claude-dotfiles.sh /usr/local/bin/setup-claude-dotfiles
 COPY claude-docker-info.sh /usr/local/bin/claude-docker-info
 COPY scutil /usr/local/bin/scutil
 COPY docker /usr/local/bin/docker
+COPY statusline.py /usr/local/bin/claude-statusline
 COPY .claude-docker.json /usr/local/share/claude-docker/manifest.json
-RUN chmod 755 /usr/local/bin/setup-claude-dotfiles /usr/local/bin/claude-docker-info /usr/local/bin/scutil /usr/local/bin/docker \
+RUN chmod 755 /usr/local/bin/setup-claude-dotfiles /usr/local/bin/claude-docker-info /usr/local/bin/scutil /usr/local/bin/docker /usr/local/bin/claude-statusline \
  && mkdir -p /Users/dai \
  && ln -s /home/user/.claude /Users/dai/.claude \
  && printf '%s\n' \

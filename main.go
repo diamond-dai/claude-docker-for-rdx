@@ -159,6 +159,7 @@ func main() {
 	claudeDockerInfo := mustReadTemplate("claude-docker-info.sh")
 	scutil := mustReadTemplate("scutil")
 	dockerWrapper := mustReadTemplate("docker")
+	statuslinePy := mustReadTemplate("statusline.py")
 	claudeDotfilesDir := defaultClaudeDotfilesDir()
 
 	created, updated, unchanged, skipped := 0, 0, 0, 0
@@ -229,6 +230,7 @@ func main() {
 			{name: "claude-docker-info.sh", content: claudeDockerInfo},
 			{name: "scutil", content: scutil},
 			{name: "docker", content: dockerWrapper},
+			{name: "statusline.py", content: statuslinePy},
 		}
 
 		changedFiles := make([]string, 0, len(files)+1)

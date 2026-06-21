@@ -112,6 +112,13 @@ write_container_settings() {
     jq 'del(.remoteControlAtStartup, .agentPushNotifEnabled)' "$src" > "$tmp"
   fi
   mv "$tmp" "$dst"
+
+  # container 専用 statusline で強制上書き(dotfiles 側のホスト用 statusline は無視)。
+  if [ -x /usr/local/bin/claude-statusline ]; then
+    tmp="$(mktemp)"
+    jq '.statusLine = {type: "command", command: "/usr/local/bin/claude-statusline"}' "$dst" > "$tmp"
+    mv "$tmp" "$dst"
+  fi
 }
 
 persist_global_config
