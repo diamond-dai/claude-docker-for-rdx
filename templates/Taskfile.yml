@@ -28,6 +28,23 @@ tasks:
       # (ソケットが無い = agent 転送なしの場合は何もしない)
       - docker compose exec -u root claude bash -lc 'test -S /ssh-agent && chown user:user /ssh-agent || true'
       - docker compose exec -T claude setup-claude-dotfiles
+      # 案件側 playwright バージョンに合わせて chromium を install する。
+      # image には latest が焼かれているが、案件側 package.json と乖離があると
+      # browser not found で claude がハマる。pnpm dlx + 同 PLAYWRIGHT_BROWSERS_PATH
+      # 上で idempotent: 同バージョン既存なら瞬時に返る。
+      - |
+        docker compose exec -T claude bash -lc '
+          for pkg in /workspace/apps/frontend/package.json /workspace/package.json; do
+            [ -f "$pkg" ] || continue
+            ver=$(jq -r "((.devDependencies // {}) + (.dependencies // {})) | (.\"@playwright/test\" // .playwright // empty)" "$pkg" 2>/dev/null | sed "s/[\^~>=< ]//g")
+            [ -n "$ver" ] || continue
+            echo "playwright $ver detected in $pkg"
+            pnpm dlx playwright@"$ver" install chromium >/dev/null 2>&1 \
+              && echo "  chromium ready" \
+              || echo "  install failed (skip; claude can retry manually)"
+            break
+          done
+        '
 
   prepull:
     desc: Pre-pull common project images into this environment's DinD cache
