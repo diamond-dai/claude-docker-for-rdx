@@ -62,6 +62,17 @@ func mustReadTemplate(name string) string {
 	return string(b)
 }
 
+// account ごとの git user 設定。コンテナ内 setup-claude-dotfiles で
+// git config --global user.{name,email} に書き込む。
+// 該当 account が無い場合は空のまま (=未設定で起動。host 側で
+// 別途設定したい時にも干渉しない)。
+var accountGitIdentity = map[string]struct {
+	Name  string
+	Email string
+}{
+	"gg": {Name: "recreation-arai-daisuke", Email: "d.arai@re-creation.co.jp"},
+}
+
 func defaultClaudeDotfilesDir() string {
 	if dir := os.Getenv("CLAUDE_DOTFILES_CLAUDE_DIR"); dir != "" {
 		return expandHome(dir)
@@ -210,12 +221,18 @@ func main() {
 		if err := os.MkdirAll(envDir, 0o755); err != nil {
 			fatalf("mkdir %s: %v", envDir, err)
 		}
+		gitName, gitEmail := "", ""
+		if id, ok := accountGitIdentity[acct]; ok {
+			gitName, gitEmail = id.Name, id.Email
+		}
 		compose := strings.NewReplacer(
 			"__PROJECT__", "../"+name,
 			"__ENVNAME__", fullName,
 			"__ACCT__", acct,
 			"__ACCT_PROJECT__", acct+"-"+sanitize(base), // 通知/ターミナルタイトル用(例: gg-riku_dx_web_1)
 			"__CLAUDE_DOTFILES__", claudeDotfilesDir,
+			"__GIT_USER_NAME__", gitName,
+			"__GIT_USER_EMAIL__", gitEmail,
 		).Replace(composeTmpl)
 
 		files := []struct {

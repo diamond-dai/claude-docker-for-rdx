@@ -128,6 +128,15 @@ link_item "hooks"
 link_item "skills"
 link_item "CLAUDE.md"
 
+# git identity: compose 経由で渡された GIT_USER_NAME / GIT_USER_EMAIL を
+# git config --global に焼く。空なら何もしない(他経路で設定済みでも壊さない)。
+if [ -n "${GIT_USER_NAME:-}" ]; then
+  git config --global user.name "$GIT_USER_NAME"
+fi
+if [ -n "${GIT_USER_EMAIL:-}" ]; then
+  git config --global user.email "$GIT_USER_EMAIL"
+fi
+
 # statusline: container 専用 wrapper を実体として配置する。
 # 案件リポの .claude/settings.local.json が `bash ~/.claude/statusline-command.sh`
 # を呼ぶケースを取り込むため、user settings の statusLine override だけでは不十分。

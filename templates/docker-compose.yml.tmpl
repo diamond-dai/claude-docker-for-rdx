@@ -25,6 +25,10 @@ services:
       - UV_LINK_MODE=copy
       - PYTHONDONTWRITEBYTECODE=1
       - PLAYWRIGHT_BROWSERS_PATH=/home/user/.cache/ms-playwright
+      # account ごとの git identity。値は main.go の accountGitIdentity 由来。
+      # 空の場合は setup-claude-dotfiles 内で skip するので未設定で起動できる。
+      - GIT_USER_NAME=__GIT_USER_NAME__
+      - GIT_USER_EMAIL=__GIT_USER_EMAIL__
     volumes:
       - __PROJECT__:/workspace                     # 隣の案件リポジトリ(ソース共有)
 
