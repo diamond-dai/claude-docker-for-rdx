@@ -107,7 +107,7 @@ ENV UV_HTTP_TIMEOUT=120 \
 # ベースイメージは言語非依存にし、案件で必要なランタイムだけ mise で入れる。
 # riku_dx_web は Node/pnpm と Go を使うため、現テンプレートではここで入れる。
 RUN curl https://mise.run | sh \
- && mise use -g node@24 go@latest \
+ && mise use -g node@24 go@latest lefthook@latest \
  && curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=9.15.0 SHELL="$(command -v bash)" sh - \
  && pnpm add -g @biomejs/biome
 
