@@ -80,20 +80,6 @@ RUN mkdir -p /home/user/.claude /home/user/.config/gh /home/user/.ssh \
  && chown -R user:user /home/user/.claude /home/user/.config /home/user/.ssh \
  && chmod 700 /home/user/.ssh
 
-COPY setup-claude-dotfiles.sh /usr/local/bin/setup-claude-dotfiles
-COPY claude-docker-info.sh /usr/local/bin/claude-docker-info
-COPY scutil /usr/local/bin/scutil
-COPY docker /usr/local/bin/docker
-COPY statusline.py /usr/local/bin/claude-statusline
-COPY .claude-docker.json /usr/local/share/claude-docker/manifest.json
-RUN chmod 755 /usr/local/bin/setup-claude-dotfiles /usr/local/bin/claude-docker-info /usr/local/bin/scutil /usr/local/bin/docker /usr/local/bin/claude-statusline \
- && mkdir -p /Users/dai \
- && ln -s /home/user/.claude /Users/dai/.claude \
- && printf '%s\n' \
-      'export PNPM_HOME=/home/user/.local/share/pnpm' \
-      'export PATH=/home/user/.local/bin:/home/user/.local/share/mise/shims:${PNPM_HOME}:${PATH}' \
-      > /etc/profile.d/claude-docker-path.sh
-
 USER user
 ENV UV_HTTP_TIMEOUT=120 \
     UV_PYTHON=3.13 \
@@ -125,5 +111,25 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 # ---- uv (latest at image build time) ----
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
  && uv python install 3.13
+
+# ---- Host から COPY する script / manifest 系は最後にまとめる ----
+# script / manifest は頻繁に変わるが、上の重い install 群(mise/playwright/claude/uv)の
+# キャッシュを温存したいので末尾に配置する。これらの変更で rebuild するのは下記の
+# 3 レイヤだけになる。
+USER root
+COPY setup-claude-dotfiles.sh /usr/local/bin/setup-claude-dotfiles
+COPY claude-docker-info.sh /usr/local/bin/claude-docker-info
+COPY scutil /usr/local/bin/scutil
+COPY docker /usr/local/bin/docker
+COPY statusline.py /usr/local/bin/claude-statusline
+COPY .claude-docker.json /usr/local/share/claude-docker/manifest.json
+RUN chmod 755 /usr/local/bin/setup-claude-dotfiles /usr/local/bin/claude-docker-info /usr/local/bin/scutil /usr/local/bin/docker /usr/local/bin/claude-statusline \
+ && mkdir -p /Users/dai \
+ && ln -sf /home/user/.claude /Users/dai/.claude \
+ && printf '%s\n' \
+      'export PNPM_HOME=/home/user/.local/share/pnpm' \
+      'export PATH=/home/user/.local/bin:/home/user/.local/share/mise/shims:${PNPM_HOME}:${PATH}' \
+      > /etc/profile.d/claude-docker-path.sh
+USER user
 
 WORKDIR /workspace

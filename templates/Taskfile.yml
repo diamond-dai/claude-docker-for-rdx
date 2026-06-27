@@ -118,72 +118,51 @@ tasks:
     cmds:
       - docker compose exec claude bash -lc 'cd /workspace && DATABASE_URL="{{.DEV_DATABASE_URL}}" POSTGRES_HOST=dind pnpm dev'
 
-  host-dev:
-    desc: 案件側ディレクトリで dev サーバ用の host tmux session を detached で作る(attach は別途 tmux a -t <name>-dev)
-    cmds:
-      - task: _host-session
-        vars: {SUFFIX: dev}
-
-  host-cmd:
-    desc: 案件側ディレクトリでコマンド実行用の host tmux session を detached で作る(attach は別途 tmux a -t <name>-cmd)
-    cmds:
-      - task: _host-session
-        vars: {SUFFIX: cmd}
-
-  _host-session:
-    # host-dev / host-cmd から task: 経由で呼ぶ共通ロジック。
-    # internal は task: 呼び出しはブロックしないので、外部 CLI からだけ隠れる。
-    # attach はしない(detached で作るだけ)。利用者は別途 tmux attach する。
-    internal: true
-    cmds:
-      - |
-        proj_name="$(basename "$PWD" | sed 's/-claude$//')"
-        project_dir="$(cd "$(dirname "$PWD")/$proj_name" 2>/dev/null && pwd)"
-        if [ -z "$project_dir" ] || [ ! -d "$project_dir" ]; then
-          echo "ERROR: 案件ディレクトリが見つかりません(想定: ../$proj_name)" >&2
-          exit 1
-        fi
-        session="${proj_name}-{{.SUFFIX}}"
-        if tmux has-session -t "$session" 2>/dev/null; then
-          echo "session '$session' は既に存在します(attach: tmux a -t $session)"
-          exit 0
-        fi
-        # pane の中で動かす shell。login mode で ~/.zprofile 等を確実に source。
-        tmux new-session -d -s "$session" -c "$project_dir" "$SHELL -l"
-        echo "created: $session (cwd: $project_dir)"
-        echo "  attach:  tmux a -t $session"
-
-  claude:
-    desc: Start Claude Code (host tmux に乗せる。同 session 重複起動は拒否、detach 状態なら再 attach)
+  zellij:
+    desc: Zellij で右=claude / 左上=dev / 左下=cmd の3 pane 起動 or 既存 session に復帰
     deps: [up]
     interactive: true
     cmds:
       - |
-        session="claude-${CLAUDE_ENV_NAME:-$(basename "$PWD")}"
-        if tmux has-session -t "$session" 2>/dev/null; then
-          clients=$(tmux list-clients -t "$session" 2>/dev/null | wc -l | tr -d ' ')
-          if [ "$clients" -gt 0 ]; then
-            echo "ERROR: tmux session '$session' に既に attach 中のクライアントがあります。" >&2
-            echo "  そのターミナルで作業を続けるか、detach してから再実行してください:" >&2
-            echo "    tmux detach -s $session   # 既存クライアント切断" >&2
-            exit 1
-          fi
-          echo "detach 状態の session '$session' に再 attach します"
+        proj_name="$(basename "$PWD" | sed 's/-claude$//')"
+        # zellij ls は --no-formatting を付けないと ANSI カラーが混じって grep ^ が当たらない。
+        sessions="$(zellij ls --no-formatting 2>/dev/null)"
+        if echo "$sessions" | grep -q "^${proj_name}\b.*EXITED"; then
+          # 既存だが dead(直前の session が落ちて残骸が残ってる)。掃除して下で新規作成。
+          zellij delete-session "$proj_name" 2>/dev/null || true
+        elif echo "$sessions" | grep -q "^${proj_name}\b"; then
+          # 既存で生きてる → attach(layout は再生成しない)
+          exec zellij a "$proj_name"
         fi
-        # tmux server が起動する shell は init を最小限しか読まず PATH が落ちる
-        # (macOS は /etc/zshenv の path_helper が再構築する)ため、$SHELL を login
-        # mode で起動して ~/.zprofile 等を確実に source させて PATH を整える。
-        cmd="$SHELL -lc 'exec task claude-inner'"
-        if [ -n "$TMUX" ]; then
-          tmux new-session -d -A -s "$session" "$cmd"
-          exec tmux switch-client -t "$session"
-        else
-          exec tmux new-session -A -s "$session" "$cmd"
-        fi
+        # project 名が dir 毎に違うので global layout が使えない。inline で生成する。
+        layout_file=".zellij-layout.kdl"
+        # Zellij の split_direction:
+        #   vertical   = 縦の分割線 → 左右に並ぶ
+        #   horizontal = 横の分割線 → 上下に並ぶ
+        cat > "$layout_file" <<EOF
+        layout {
+            pane split_direction="vertical" {
+                pane split_direction="horizontal" size="50%" {
+                    pane name="dev" {
+                        command "task"
+                        args "dev"
+                    }
+                    pane name="cmd" cwd="../$proj_name"
+                }
+                pane name="claude" size="50%" {
+                    command "task"
+                    args "claude"
+                }
+            }
+        }
+        EOF
+        # --layout は「既存 session に tab 追加」の意味なので、新規作成には
+        # --new-session-with-layout(-n) を使う必要がある。
+        exec zellij --session "$proj_name" -n "$layout_file"
 
-  claude-inner:
-    # internal にすると tmux 経由(=シェル呼び出し扱い)で実行できないので付けない。
-    # desc を省略しているので task --list には出ない。
+  claude:
+    desc: Start Claude Code (新規 or 既存セッション復元)。Ctrl+C で抜けてもメニューが残る
+    deps: [up]
     interactive: true
     cmds:
       - task doctor
@@ -257,27 +236,8 @@ tasks:
         exit $status
 
   claude-opus-4-7:
-    desc: Start Claude Code with Claude Opus 4.7 1M (host tmux 上、claude task と同 session を共有)
+    desc: Start Claude Code with Claude Opus 4.7 1M
     deps: [up]
-    interactive: true
-    cmds:
-      - |
-        session="claude-${CLAUDE_ENV_NAME:-$(basename "$PWD")}"
-        if tmux has-session -t "$session" 2>/dev/null; then
-          clients=$(tmux list-clients -t "$session" 2>/dev/null | wc -l | tr -d ' ')
-          if [ "$clients" -gt 0 ]; then
-            echo "ERROR: tmux session '$session' に既に attach 中のクライアントがあります。" >&2
-            echo "  そのターミナルで作業を続けるか、detach してから再実行してください:" >&2
-            echo "    tmux detach -s $session   # 既存クライアント切断" >&2
-            exit 1
-          fi
-          echo "detach 状態の session '$session' に再 attach します"
-        fi
-        exec tmux new-session -A -s "$session" "task claude-opus-4-7-inner"
-
-  claude-opus-4-7-inner:
-    # internal にすると tmux 経由(=シェル呼び出し扱い)で実行できないので付けない。
-    # desc を省略しているので task --list には出ない。
     interactive: true
     cmds:
       - task doctor

@@ -41,13 +41,16 @@ persist_global_config() {
 
   if [ -L "$src" ]; then
     rm -f "$src"
+  elif [ -e "$src" ] && [ ! -f "$src" ]; then
+    # ディレクトリ等の予期せぬ実体は merge できないので消す。
+    rm -rf "$src"
   fi
 
   if [ -e "$old_dst" ] && [ "$old_dst" != "$dst" ]; then
     if [ -e "$dst" ]; then
       tmp="$(mktemp)"
       jq -s '.[0] * .[1] | del(.remoteControlAtStartup, .agentPushNotifEnabled)' "$dst" "$old_dst" > "$tmp"
-      mv "$tmp" "$dst"
+      install -m 0600 "$tmp" "$dst" && rm -f "$tmp"
       rm -f "$old_dst"
     else
       mv "$old_dst" "$dst"
@@ -57,7 +60,7 @@ persist_global_config() {
   if [ -e "$src" ] && [ -e "$dst" ]; then
     tmp="$(mktemp)"
     jq -s '.[0] * .[1] | del(.remoteControlAtStartup, .agentPushNotifEnabled)' "$dst" "$src" > "$tmp"
-    mv "$tmp" "$dst"
+    install -m 0600 "$tmp" "$dst" && rm -f "$tmp"
     rm -f "$src"
   elif [ -e "$src" ]; then
     mv "$src" "$dst"
@@ -67,8 +70,9 @@ persist_global_config() {
 
   tmp="$(mktemp)"
   jq 'del(.remoteControlAtStartup, .agentPushNotifEnabled)' "$dst" > "$tmp"
-  mv "$tmp" "$dst"
-  ln -s "$dst" "$src"
+  install -m 0600 "$tmp" "$dst" && rm -f "$tmp"
+  # 既存ファイル(claude が初回起動時に勝手に作る等)があっても上書きする。
+  ln -sf "$dst" "$src"
 }
 
 link_item() {
@@ -103,21 +107,25 @@ write_container_settings() {
 
   if [ -L "$dst" ]; then
     rm -f "$dst"
+  elif [ -e "$dst" ] && [ ! -f "$dst" ]; then
+    # ディレクトリ等の予期せぬ実体(過去の失敗 run / Docker volume mount の残骸)
+    # は merge できないので消す。
+    rm -rf "$dst"
   fi
 
   tmp="$(mktemp)"
-  if [ -e "$dst" ]; then
+  if [ -f "$dst" ]; then
     jq -s '.[0] * (.[1] | del(.remoteControlAtStartup, .agentPushNotifEnabled))' "$dst" "$src" > "$tmp"
   else
     jq 'del(.remoteControlAtStartup, .agentPushNotifEnabled)' "$src" > "$tmp"
   fi
-  mv "$tmp" "$dst"
+  install -m 0600 "$tmp" "$dst" && rm -f "$tmp"
 
   # container 専用 statusline で強制上書き(dotfiles 側のホスト用 statusline は無視)。
   if [ -x /usr/local/bin/claude-statusline ]; then
     tmp="$(mktemp)"
     jq '.statusLine = {type: "command", command: "/usr/local/bin/claude-statusline"}' "$dst" > "$tmp"
-    mv "$tmp" "$dst"
+    install -m 0600 "$tmp" "$dst" && rm -f "$tmp"
   fi
 }
 
