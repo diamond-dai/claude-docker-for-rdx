@@ -118,6 +118,41 @@ tasks:
     cmds:
       - docker compose exec claude bash -lc 'cd /workspace && DATABASE_URL="{{.DEV_DATABASE_URL}}" POSTGRES_HOST=dind pnpm dev'
 
+  host-dev:
+    desc: 案件側ディレクトリで dev サーバ用の host tmux session を detached で作る(attach は別途 tmux a -t <name>-dev)
+    cmds:
+      - task: _host-session
+        vars: {SUFFIX: dev}
+
+  host-cmd:
+    desc: 案件側ディレクトリでコマンド実行用の host tmux session を detached で作る(attach は別途 tmux a -t <name>-cmd)
+    cmds:
+      - task: _host-session
+        vars: {SUFFIX: cmd}
+
+  _host-session:
+    # host-dev / host-cmd から task: 経由で呼ぶ共通ロジック。
+    # internal は task: 呼び出しはブロックしないので、外部 CLI からだけ隠れる。
+    # attach はしない(detached で作るだけ)。利用者は別途 tmux attach する。
+    internal: true
+    cmds:
+      - |
+        proj_name="$(basename "$PWD" | sed 's/-claude$//')"
+        project_dir="$(cd "$(dirname "$PWD")/$proj_name" 2>/dev/null && pwd)"
+        if [ -z "$project_dir" ] || [ ! -d "$project_dir" ]; then
+          echo "ERROR: 案件ディレクトリが見つかりません(想定: ../$proj_name)" >&2
+          exit 1
+        fi
+        session="${proj_name}-{{.SUFFIX}}"
+        if tmux has-session -t "$session" 2>/dev/null; then
+          echo "session '$session' は既に存在します(attach: tmux a -t $session)"
+          exit 0
+        fi
+        # pane の中で動かす shell。login mode で ~/.zprofile 等を確実に source。
+        tmux new-session -d -s "$session" -c "$project_dir" "$SHELL -l"
+        echo "created: $session (cwd: $project_dir)"
+        echo "  attach:  tmux a -t $session"
+
   claude:
     desc: Start Claude Code (host tmux に乗せる。同 session 重複起動は拒否、detach 状態なら再 attach)
     deps: [up]
