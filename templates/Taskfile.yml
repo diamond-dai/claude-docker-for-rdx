@@ -119,8 +119,36 @@ tasks:
       - docker compose exec claude bash -lc 'cd /workspace && DATABASE_URL="{{.DEV_DATABASE_URL}}" POSTGRES_HOST=dind pnpm dev'
 
   claude:
-    desc: Start Claude Code (新規 or 既存セッション復元)。Ctrl+C で抜けてもメニューが残る
+    desc: Start Claude Code (host tmux に乗せる。同 session 重複起動は拒否、detach 状態なら再 attach)
     deps: [up]
+    interactive: true
+    cmds:
+      - |
+        session="claude-${CLAUDE_ENV_NAME:-$(basename "$PWD")}"
+        if tmux has-session -t "$session" 2>/dev/null; then
+          clients=$(tmux list-clients -t "$session" 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$clients" -gt 0 ]; then
+            echo "ERROR: tmux session '$session' に既に attach 中のクライアントがあります。" >&2
+            echo "  そのターミナルで作業を続けるか、detach してから再実行してください:" >&2
+            echo "    tmux detach -s $session   # 既存クライアント切断" >&2
+            exit 1
+          fi
+          echo "detach 状態の session '$session' に再 attach します"
+        fi
+        # tmux server が起動する shell は init を最小限しか読まず PATH が落ちる
+        # (macOS は /etc/zshenv の path_helper が再構築する)ため、$SHELL を login
+        # mode で起動して ~/.zprofile 等を確実に source させて PATH を整える。
+        cmd="$SHELL -lc 'exec task claude-inner'"
+        if [ -n "$TMUX" ]; then
+          tmux new-session -d -A -s "$session" "$cmd"
+          exec tmux switch-client -t "$session"
+        else
+          exec tmux new-session -A -s "$session" "$cmd"
+        fi
+
+  claude-inner:
+    # internal にすると tmux 経由(=シェル呼び出し扱い)で実行できないので付けない。
+    # desc を省略しているので task --list には出ない。
     interactive: true
     cmds:
       - task doctor
@@ -194,8 +222,27 @@ tasks:
         exit $status
 
   claude-opus-4-7:
-    desc: Start Claude Code with Claude Opus 4.7 1M
+    desc: Start Claude Code with Claude Opus 4.7 1M (host tmux 上、claude task と同 session を共有)
     deps: [up]
+    interactive: true
+    cmds:
+      - |
+        session="claude-${CLAUDE_ENV_NAME:-$(basename "$PWD")}"
+        if tmux has-session -t "$session" 2>/dev/null; then
+          clients=$(tmux list-clients -t "$session" 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$clients" -gt 0 ]; then
+            echo "ERROR: tmux session '$session' に既に attach 中のクライアントがあります。" >&2
+            echo "  そのターミナルで作業を続けるか、detach してから再実行してください:" >&2
+            echo "    tmux detach -s $session   # 既存クライアント切断" >&2
+            exit 1
+          fi
+          echo "detach 状態の session '$session' に再 attach します"
+        fi
+        exec tmux new-session -A -s "$session" "task claude-opus-4-7-inner"
+
+  claude-opus-4-7-inner:
+    # internal にすると tmux 経由(=シェル呼び出し扱い)で実行できないので付けない。
+    # desc を省略しているので task --list には出ない。
     interactive: true
     cmds:
       - task doctor
