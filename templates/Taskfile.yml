@@ -143,10 +143,9 @@ tasks:
         layout {
             pane split_direction="vertical" {
                 pane split_direction="horizontal" size="50%" {
-                    pane name="dev" {
-                        command "task"
-                        args "dev"
-                    }
+                    // 左上 dev: 案件側 dir で素の shell。dev サーバ起動等。
+                    pane name="dev" cwd="../$proj_name"
+                    // 左下 cmd: 案件側 dir で素の shell。git / 直接コマンド用。
                     pane name="cmd" cwd="../$proj_name"
                 }
                 pane name="claude" size="50%" {
