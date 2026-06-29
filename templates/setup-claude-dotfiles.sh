@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 複数の task(zellij layout 内 dev / claude pane 等)から deps: [up] 経由で
+# 同時起動されると、link 系処理が race して dst を dir として見てしまい、
+# RO mount の dotfiles 配下に書き込もうとして EROFS で失敗する。
+# flock で直列化する(他 instance は終わるまで待つ)。
+exec 200>/tmp/setup-claude-dotfiles.lock
+flock 200
+
 src_root="${CLAUDE_DOTFILES_DIR:-/dotfiles/claude}"
 dst_root="${HOME}/.claude"
 state_root="${CLAUDE_STATE_DIR:-${HOME}/.claude-state}"
