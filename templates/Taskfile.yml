@@ -22,7 +22,7 @@ tasks:
           echo "claude image is stale; rebuilding..."
           docker compose up -d --build --force-recreate claude
         fi
-      - docker compose exec -u root claude chown -R user:user /home/user/.claude /home/user/.claude-state /home/user/.config/gh /workspace/node_modules /workspace/.venv /workspace/.pnpm-store /workspace/.turbo /workspace/.ruff_cache /home/user/go /home/user/.cache/go-build /home/user/.cache/ms-playwright /workspace/apps/frontend/node_modules /workspace/apps/frontend/.next /workspace/apps/backend/.venv /workspace/apps/backend/.turbo /workspace/apps/backend/.pytest_cache /workspace/apps/backend/.ruff_cache /workspace/apps/frontend/.ruff_cache
+      - docker compose exec -u root claude chown -R user:user /home/user/.claude /home/user/.claude-state /home/user/.config/gh /workspace/node_modules /workspace/.venv /workspace/.pnpm-store /workspace/.turbo /workspace/.ruff_cache /home/user/go /home/user/.cache/go-build /home/user/.cache/ms-playwright /workspace/apps/frontend/node_modules /workspace/apps/frontend/.next /workspace/apps/backend/.venv /workspace/apps/backend/.turbo /workspace/apps/backend/.pytest_cache /workspace/apps/backend/.ruff_cache /workspace/apps/frontend/.ruff_cache /workspace/apps/backend/bin
       # 転送された ssh-agent ソケットは root:root 0660 で来るため、非rootの user が
       # 接続できず git の publickey 認証が失敗する。user 所有に直して接続可能にする。
       # (ソケットが無い = agent 転送なしの場合は何もしない)

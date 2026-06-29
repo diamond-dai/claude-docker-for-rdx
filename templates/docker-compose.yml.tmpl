@@ -52,6 +52,14 @@ services:
       - backend-pytest-cache:/workspace/apps/backend/.pytest_cache
       - backend-ruff-cache:/workspace/apps/backend/.ruff_cache
       - frontend-ruff-cache:/workspace/apps/frontend/.ruff_cache
+      # apps/backend/bin/ には host で dagger 等の Mac 用 binary が落ちるので隠す。
+      # nocopy: true が無いと新規 volume 作成時に bind mount 側の Mac binary を
+      # コピーして初期化してしまうため明示する。
+      - type: volume
+        source: backend-bin
+        target: /workspace/apps/backend/bin
+        volume:
+          nocopy: true
       # ---- protected external: 認証・初回状態。docker compose down -v でも削除されない ----
       - __ACCT__-claude-enterprise:/home/user/.claude    # Claude OAuth / credentials(account内で共有)
       - __ACCT__-claude-state:/home/user/.claude-state   # ~/.claude.json(machineID / firstStartTime 等)
@@ -97,6 +105,7 @@ volumes:
   backend-pytest-cache:
   backend-ruff-cache:
   frontend-ruff-cache:
+  backend-bin:
 
   # ---- protected external: 認証・初回状態 ----
   # Compose 管理外なので docker compose down -v でも削除されない。
