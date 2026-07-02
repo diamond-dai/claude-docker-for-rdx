@@ -160,7 +160,8 @@ tasks:
         first_wid=""
 
         # 特別枠: claude-docker-for-rdx(この template 本体)を先頭に置く。
-        # xxx-claude ペアを持たない開発用リポジトリなので単一 pane で開く。
+        # xxx-claude ペアを持たないので task claude は投げず、全 4 pane を
+        # 同じ dir の shell として開く(編集/build/検証用)。
         # 対応 dir が親 dir 直下に無い環境ではスキップされる。
         special="claude-docker-for-rdx"
         special_dir="$parent_dir/$special"
@@ -177,6 +178,11 @@ tasks:
           else
             wid_s="$(herdr workspace create --cwd "$special_dir" --label "$special" --no-focus | \
                      python3 -c "import json,sys; print(json.loads(sys.stdin.read())['result']['workspace']['workspace_id'])")"
+            p_slu="${wid_s}:p1"
+            p_sru="$(herdr pane split --pane "$p_slu" --direction right --ratio 0.5 --cwd "$special_dir" --no-focus | \
+                     python3 -c "import json,sys; print(json.loads(sys.stdin.read())['result']['pane']['pane_id'])")"
+            herdr pane split --pane "$p_slu" --direction down --ratio 0.5 --cwd "$special_dir" --no-focus >/dev/null
+            herdr pane split --pane "$p_sru" --direction down --ratio 0.5 --cwd "$special_dir" --no-focus >/dev/null
             echo "created $special ($wid_s)"
           fi
           first_wid="$wid_s"
