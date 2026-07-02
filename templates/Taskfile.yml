@@ -118,46 +118,118 @@ tasks:
     cmds:
       - docker compose exec claude bash -lc 'cd /workspace && DATABASE_URL="{{.DEV_DATABASE_URL}}" POSTGRES_HOST=dind pnpm dev'
 
-  zellij:
-    desc: Zellij で右=claude / 左上=dev / 左下=cmd の3 pane 起動 or 既存 session に復帰
+  herdr:
+    desc: Herdr(session=gg) で親dir の全 `xxx-claude` 兄弟を workspace として一括登録 & attach
     deps: [up]
     interactive: true
     cmds:
       - |
-        proj_name="$(basename "$PWD" | sed 's/-claude$//')"
-        # zellij ls は --no-formatting を付けないと ANSI カラーが混じって grep ^ が当たらない。
-        sessions="$(zellij ls --no-formatting 2>/dev/null)"
-        if echo "$sessions" | grep -q "^${proj_name}\b.*EXITED"; then
-          # 既存だが dead(直前の session が落ちて残骸が残ってる)。掃除して下で新規作成。
-          zellij delete-session "$proj_name" 2>/dev/null || true
-        elif echo "$sessions" | grep -q "^${proj_name}\b"; then
-          # 既存で生きてる → attach(layout は再生成しない)
-          exec zellij a "$proj_name"
+        set -eu
+        # 親 dir(riku_dx_web_work/) 配下の `xxx-claude` を全部拾って、対応 workspace(名前=xxx)を
+        # 未登録なら作る。各 workspace は 4 pane:
+        #   p1(左上=xxx dir)     p2(右上=xxx-claude で task claude)
+        #   p3(左下=xxx dir)     p4(右下=xxx dir)
+        # 実行位置は「どの xxx-claude 上でも」でも「親 dir 上」でも OK。
+        parent_dir="$(cd .. && pwd)"
+        # 自分が xxx-claude 側で叩かれた場合は親を親に、そうでなければ現在地を親と見なす。
+        if [ -f "$PWD/Taskfile.yml" ] && [ -f "$PWD/docker-compose.yml" ]; then
+          parent_dir="$(cd .. && pwd)"
         fi
-        # project 名が dir 毎に違うので global layout が使えない。inline で生成する。
-        layout_file=".zellij-layout.kdl"
-        # Zellij の split_direction:
-        #   vertical   = 縦の分割線 → 左右に並ぶ
-        #   horizontal = 横の分割線 → 上下に並ぶ
-        cat > "$layout_file" <<EOF
-        layout {
-            pane split_direction="vertical" {
-                pane split_direction="horizontal" size="50%" {
-                    // 左上 dev: 案件側 dir で素の shell。dev サーバ起動等。
-                    pane name="dev" cwd="../$proj_name"
-                    // 左下 cmd: 案件側 dir で素の shell。git / 直接コマンド用。
-                    pane name="cmd" cwd="../$proj_name"
-                }
-                pane name="claude" size="50%" {
-                    command "task"
-                    args "claude"
-                }
-            }
-        }
-        EOF
-        # --layout は「既存 session に tab 追加」の意味なので、新規作成には
-        # --new-session-with-layout(-n) を使う必要がある。
-        exec zellij --session "$proj_name" -n "$layout_file"
+
+        session="gg"
+        export HERDR_SESSION="$session"
+
+        # session gg の socket を bootstrap。`herdr --session` は attach モードで tty を要求するため、
+        # /dev/null に繋いだ状態で bg 起動 → socket ができたら即 kill、で socket だけ用意する。
+        sock="$HOME/.config/herdr/sessions/$session/herdr.sock"
+        if [ ! -S "$sock" ] || ! herdr session list --json 2>/dev/null | \
+             python3 -c "import sys,json; d=json.loads(sys.stdin.read()); \
+                 sys.exit(0 if any(s['name']=='$session' and s['running'] for s in d.get('sessions',[])) else 1)"; then
+          ( herdr --session "$session" </dev/null >/dev/null 2>&1 & \
+            p=$!; \
+            for _ in 1 2 3 4 5 6 7 8 9 10; do [ -S "$sock" ] && break; sleep 0.3; done; \
+            kill "$p" 2>/dev/null || true ) >/dev/null 2>&1
+          for _ in 1 2 3 4 5; do [ -S "$sock" ] && break; sleep 0.2; done
+        fi
+
+        # 既存 workspace の label 集合を取っておく(重複作成防止)。
+        existing="$(herdr workspace list 2>/dev/null | \
+                    python3 -c "import json,sys; d=json.loads(sys.stdin.read()); \
+                    print('\n'.join(w.get('label','') for w in d.get('result',{}).get('workspaces',[])))")"
+
+        first_wid=""
+
+        # 特別枠: claude-docker-for-rdx(この template 本体)を先頭に置く。
+        # xxx-claude ペアを持たない開発用リポジトリなので単一 pane で開く。
+        # 対応 dir が親 dir 直下に無い環境ではスキップされる。
+        special="claude-docker-for-rdx"
+        special_dir="$parent_dir/$special"
+        if [ -d "$special_dir" ]; then
+          if printf '%s\n' "$existing" | grep -Fxq "$special"; then
+            wid_s="$(herdr workspace list | python3 -c "
+        import json,sys
+        d=json.loads(sys.stdin.read())
+        for w in d.get('result',{}).get('workspaces',[]):
+            if w.get('label')=='$special':
+                print(w['workspace_id']); break
+        ")"
+            echo "keep $special ($wid_s)"
+          else
+            wid_s="$(herdr workspace create --cwd "$special_dir" --label "$special" --no-focus | \
+                     python3 -c "import json,sys; print(json.loads(sys.stdin.read())['result']['workspace']['workspace_id'])")"
+            echo "created $special ($wid_s)"
+          fi
+          first_wid="$wid_s"
+        fi
+
+        # 親 dir 直下の `*-claude` を走査。alphabetical に処理。
+        for cdir in "$parent_dir"/*-claude; do
+          [ -d "$cdir" ] || continue
+          proj_name="$(basename "$cdir" | sed 's/-claude$//')"
+          work_dir="$parent_dir/$proj_name"
+          [ -d "$work_dir" ] || { echo "skip $proj_name: 作業 dir が無い ($work_dir)"; continue; }
+          if printf '%s\n' "$existing" | grep -Fxq "$proj_name"; then
+            wid="$(herdr workspace list | python3 -c "
+        import json,sys
+        d=json.loads(sys.stdin.read())
+        for w in d.get('result',{}).get('workspaces',[]):
+            if w.get('label')=='$proj_name':
+                print(w['workspace_id']); break
+        ")"
+            echo "keep $proj_name ($wid)"
+          else
+            wid="$(herdr workspace create --cwd "$work_dir" --label "$proj_name" --no-focus | \
+                   python3 -c "import json,sys; print(json.loads(sys.stdin.read())['result']['workspace']['workspace_id'])")"
+            p_lu="${wid}:p1"
+            p_ru="$(herdr pane split --pane "$p_lu" --direction right --ratio 0.5 --cwd "$cdir" --no-focus | \
+                    python3 -c "import json,sys; print(json.loads(sys.stdin.read())['result']['pane']['pane_id'])")"
+            herdr pane split --pane "$p_lu" --direction down --ratio 0.5 --cwd "$work_dir" --no-focus >/dev/null
+            herdr pane split --pane "$p_ru" --direction down --ratio 0.5 --cwd "$work_dir" --no-focus >/dev/null
+            herdr pane run "$p_ru" "task claude" >/dev/null || true
+            echo "created $proj_name ($wid)"
+          fi
+          if [ -z "$first_wid" ]; then first_wid="$wid"; fi
+        done
+
+        # 現在地が xxx-claude ならその workspace を優先 focus、そうでなければ最初の workspace。
+        cur_proj="$(basename "$PWD" | sed 's/-claude$//')"
+        focus_wid="$(herdr workspace list | python3 -c "
+        import json,sys
+        d=json.loads(sys.stdin.read())
+        for w in d.get('result',{}).get('workspaces',[]):
+            if w.get('label')=='$cur_proj':
+                print(w['workspace_id']); break
+        ")"
+        if [ -z "$focus_wid" ]; then focus_wid="$first_wid"; fi
+        if [ -n "$focus_wid" ]; then
+          herdr workspace focus "$focus_wid" >/dev/null 2>&1 || true
+        fi
+        exit 0
+      # attach は tty allocation を新しくもらうため、別 cmd として分離する。
+      # `- | ... exec herdr` を同一 cmd 内でやると task の bash 経由で tty が
+      # 継承されず herdr TUI 初期化に失敗する(exit 1)ケースがあった。
+      # `exec` で shell を置き換え、task 側の tty をそのまま herdr に渡す。
+      - exec herdr --session gg
 
   claude:
     desc: Start Claude Code (新規 or 既存セッション復元)。Ctrl+C で抜けてもメニューが残る
